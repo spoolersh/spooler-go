@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        # TODO: uncomment 'oldstable' on Go 1.28; go.mod requires 1.27.
+        go: [ 'stable' ]
+
+    runs-on: ${{ matrix.os }}
+    env:
+      GOTOOLCHAIN: local
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Check gofmt
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then
+            echo "gofmt reported unformatted files:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+      SPOOLER_API: http://127.0.0.1:8080/v1
+      SPOOLER_KEY: local
+
+    # One container per run, as the docs' local page prescribes; the tag is
+    # pinned so the image cannot change between runs. The runner waits for
+    # the image's own health check before the first step.
+    services:
+      memspoold:
+        image: spoolersh/memspoold:latest
+        ports:
+          - 127.0.0.1:8080:8080
+        options: >-
+          --health-interval 2s
+          --health-timeout 3s
+          --health-start-period 2s
+          --health-retries 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+
+      - name: Integration test
+        run: go test -run Integration -v .

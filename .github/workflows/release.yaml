@@ -1,0 +1,50 @@
+# Cuts a release: writes the version into version.go, commits, and tags that
+# commit, so the tagged tree and the constant always agree. The push goes
+# over the release deploy key, the only actor the tag ruleset lets create
+# v* tags.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, without the v prefix (0.1.0)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+      - name: Setup
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Check version
+        run: |
+          echo '${{ inputs.version }}' | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          git rev-parse -q --verify 'refs/tags/v${{ inputs.version }}' && { echo 'tag exists'; exit 1; } || true
+
+      - name: Write version
+        run: |
+          sed -i 's/^const Version = ".*"$/const Version = "${{ inputs.version }}"/' version.go
+          grep -Fq 'const Version = "${{ inputs.version }}"' version.go
+          go build ./... && go test ./...
+
+      - name: Commit and tag
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add version.go
+          git commit -m 'Release v${{ inputs.version }}'
+          git tag -a 'v${{ inputs.version }}' -m 'v${{ inputs.version }}'
+          git push origin HEAD:${{ github.ref_name }} 'v${{ inputs.version }}'
