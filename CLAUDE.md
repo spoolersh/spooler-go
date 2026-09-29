@@ -34,7 +34,7 @@ the server does not define.
   `local` page says what it reproduces and what it does not; tests for what
   it does not run against a fake.
 - memspoold is not open source: it ships under the Spooler Local Evaluation
-  License (published at docs.spooler.sh/memspoold-license.txt), which permits
+  License (published at spooler.sh/legal/spooler-evaluation-license.txt), which permits
   development, testing, and evaluation, including automated test environments.
   Never describe it as "OSS" or "open source" in this repo; say "free for
   development and testing".
