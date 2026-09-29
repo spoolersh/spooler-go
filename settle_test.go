@@ -63,7 +63,7 @@ func TestAck(t *testing.T) {
 			},
 		},
 		{
-			name: "stale lease is a verdict",
+			name: "stale token is a verdict",
 			req: AckRequest{
 				Spool: "default",
 				Lease: "lease-1",
@@ -79,11 +79,11 @@ func TestAck(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the lease is stale"}`,
+						body:   `{"kind":"stale_token","message":"the lease is stale"}`,
 					},
 				},
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 		{
 			name: "spool is required",
@@ -126,7 +126,7 @@ func TestNack(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid lease is a verdict",
+			name: "invalid token is a verdict",
 			req: NackRequest{
 				Spool: "default",
 				Lease: "garbage",
@@ -142,11 +142,11 @@ func TestNack(t *testing.T) {
 					},
 					res: response{
 						status: 400,
-						body:   `{"kind":"invalid_lease","message":"the lease is malformed"}`,
+						body:   `{"kind":"invalid_token","message":"the lease is malformed"}`,
 					},
 				},
 			},
-			expErr: ErrInvalidLease,
+			expErr: ErrInvalidToken,
 		},
 		{
 			name: "spool is required",
@@ -212,7 +212,7 @@ func TestRelease(t *testing.T) {
 			},
 		},
 		{
-			name: "stale lease is a verdict",
+			name: "stale token is a verdict",
 			req: ReleaseRequest{
 				Spool: "default",
 				Lease: "lease-1",
@@ -228,11 +228,11 @@ func TestRelease(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the lease is stale"}`,
+						body:   `{"kind":"stale_token","message":"the lease is stale"}`,
 					},
 				},
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 		{
 			name: "spool is required",
@@ -275,7 +275,7 @@ func TestFail(t *testing.T) {
 			},
 		},
 		{
-			name: "stale lease is a verdict",
+			name: "stale token is a verdict",
 			req: FailRequest{
 				Spool: "default",
 				Lease: "lease-1",
@@ -291,11 +291,11 @@ func TestFail(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the lease is stale"}`,
+						body:   `{"kind":"stale_token","message":"the lease is stale"}`,
 					},
 				},
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 		{
 			name: "spool is required",
@@ -375,11 +375,11 @@ func TestDiscard(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the message has moved"}`,
+						body:   `{"kind":"stale_token","message":"the message has moved"}`,
 					},
 				},
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 		{
 			name: "both tokens are refused before any request",
@@ -570,7 +570,7 @@ func TestRenew(t *testing.T) {
 			},
 		},
 		{
-			name: "stale lease is a verdict",
+			name: "stale token is a verdict",
 			req: RenewRequest{
 				Spool: "default",
 				Lease: "lease-1",
@@ -586,11 +586,11 @@ func TestRenew(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the lease is stale"}`,
+						body:   `{"kind":"stale_token","message":"the lease is stale"}`,
 					},
 				},
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 		{
 			name: "spool is required",

@@ -314,7 +314,7 @@ func TestClientTrace(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the lease is stale"}`,
+						body:   `{"kind":"stale_token","message":"the lease is stale"}`,
 					},
 				},
 			},
@@ -322,7 +322,7 @@ func TestClientTrace(t *testing.T) {
 				Op:    OpAck,
 				Spool: "default",
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

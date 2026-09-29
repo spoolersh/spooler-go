@@ -414,11 +414,11 @@ func TestPeek(t *testing.T) {
 					},
 					res: response{
 						status: 410,
-						body:   `{"kind":"stale_lease","message":"the message has moved"}`,
+						body:   `{"kind":"stale_token","message":"the message has moved"}`,
 					},
 				},
 			},
-			expErr: ErrStaleLease,
+			expErr: ErrStaleToken,
 		},
 		{
 			name: "spool is required",

@@ -77,8 +77,8 @@ type ErrorKind uint
 const (
 	// ErrorKindUnknown is a kind this SDK does not know, or none.
 	ErrorKindUnknown ErrorKind = iota
-	// ErrorKindInvalidLease is the API's invalid_lease kind.
-	ErrorKindInvalidLease
+	// ErrorKindInvalidToken is the API's invalid_token kind.
+	ErrorKindInvalidToken
 	// ErrorKindDedupDisabled is the API's dedup_disabled kind.
 	ErrorKindDedupDisabled
 	// ErrorKindUnknownHeader is the API's unknown_header kind.
@@ -103,8 +103,8 @@ const (
 	ErrorKindDedupInFlight
 	// ErrorKindDedupClaimed is the API's dedup_claimed kind.
 	ErrorKindDedupClaimed
-	// ErrorKindStaleLease is the API's stale_lease kind.
-	ErrorKindStaleLease
+	// ErrorKindStaleToken is the API's stale_token kind.
+	ErrorKindStaleToken
 	// ErrorKindPayloadTooLarge is the API's payload_too_large kind.
 	ErrorKindPayloadTooLarge
 	// ErrorKindRateLimited is the API's rate_limited kind.
@@ -133,7 +133,7 @@ var (
 		ErrorKindDedupClaimed:         "dedup_claimed",
 		ErrorKindDedupDisabled:        "dedup_disabled",
 		ErrorKindDedupInFlight:        "dedup_in_flight",
-		ErrorKindInvalidLease:         "invalid_lease",
+		ErrorKindInvalidToken:         "invalid_token",
 		ErrorKindNotFailed:            "not_failed",
 		ErrorKindOperationUnconfirmed: "operation_unconfirmed",
 		ErrorKindPayloadTooLarge:      "payload_too_large",
@@ -146,7 +146,7 @@ var (
 		ErrorKindRetentionLimit:       "retention_limit",
 		ErrorKindSpoolFull:            "spool_full",
 		ErrorKindSpoolNotFound:        "spool_not_found",
-		ErrorKindStaleLease:           "stale_lease",
+		ErrorKindStaleToken:           "stale_token",
 		ErrorKindUnknownHeader:        "unknown_header",
 	}
 	errorKind2string = merge(
@@ -190,7 +190,7 @@ func (e *KindError) Error() string {
 // The sentinels, one per [ErrorKind], for [errors.Is]. See the kind for
 // what each means.
 var (
-	ErrInvalidLease         = &KindError{Kind: ErrorKindInvalidLease}
+	ErrInvalidToken         = &KindError{Kind: ErrorKindInvalidToken}
 	ErrDedupDisabled        = &KindError{Kind: ErrorKindDedupDisabled}
 	ErrUnknownHeader        = &KindError{Kind: ErrorKindUnknownHeader}
 	ErrRetentionLimit       = &KindError{Kind: ErrorKindRetentionLimit}
@@ -203,7 +203,7 @@ var (
 	ErrNotFailed            = &KindError{Kind: ErrorKindNotFailed}
 	ErrDedupInFlight        = &KindError{Kind: ErrorKindDedupInFlight}
 	ErrDedupClaimed         = &KindError{Kind: ErrorKindDedupClaimed}
-	ErrStaleLease           = &KindError{Kind: ErrorKindStaleLease}
+	ErrStaleToken           = &KindError{Kind: ErrorKindStaleToken}
 	ErrPayloadTooLarge      = &KindError{Kind: ErrorKindPayloadTooLarge}
 	ErrRateLimited          = &KindError{Kind: ErrorKindRateLimited}
 	ErrOperationUnconfirmed = &KindError{Kind: ErrorKindOperationUnconfirmed}

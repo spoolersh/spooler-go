@@ -326,10 +326,10 @@ func TestIntegrationSettle(t *testing.T) {
 				Spool: integrationSpool,
 				Lease: msg.Lease,
 			})
-			if !errors.Is(err, ErrStaleLease) {
+			if !errors.Is(err, ErrStaleToken) {
 				t.Errorf(
 					"ack after settle: %v; want %v",
-					err, ErrStaleLease,
+					err, ErrStaleToken,
 				)
 			}
 
@@ -564,10 +564,10 @@ func TestIntegrationAckAndSend(t *testing.T) {
 		Dedup: DedupString("out-2"),
 		Data:  []byte("out"),
 	})
-	if !errors.Is(err, ErrStaleLease) {
+	if !errors.Is(err, ErrStaleToken) {
 		t.Errorf(
 			"retry with the settled lease: %v; want %v",
-			err, ErrStaleLease,
+			err, ErrStaleToken,
 		)
 	}
 }
@@ -683,20 +683,20 @@ func TestIntegrationFailed(t *testing.T) {
 				Spool:  integrationSpool,
 				Handle: failed.Handle,
 			})
-			if !errors.Is(err, ErrStaleLease) {
+			if !errors.Is(err, ErrStaleToken) {
 				t.Errorf(
 					"peek with the used handle: %v; want %v",
-					err, ErrStaleLease,
+					err, ErrStaleToken,
 				)
 			}
 			err = c.Discard(t.Context(), DiscardRequest{
 				Spool:  integrationSpool,
 				Handle: failed.Handle,
 			})
-			if !errors.Is(err, ErrStaleLease) {
+			if !errors.Is(err, ErrStaleToken) {
 				t.Errorf(
 					"discard with the used handle: %v; want %v",
-					err, ErrStaleLease,
+					err, ErrStaleToken,
 				)
 			}
 
@@ -788,10 +788,10 @@ func TestIntegrationLeaseExpiry(t *testing.T) {
 		Spool: integrationSpool,
 		Lease: msg.Lease,
 	})
-	if !errors.Is(err, ErrStaleLease) {
+	if !errors.Is(err, ErrStaleToken) {
 		t.Errorf(
 			"ack with the expired lease: %v; want %v",
-			err, ErrStaleLease,
+			err, ErrStaleToken,
 		)
 	}
 }

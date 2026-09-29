@@ -43,16 +43,16 @@ func TestErrorResponse(t *testing.T) {
 		is    error  // The sentinel errors.Is must match, if any.
 	}{
 		{
-			name: "invalid lease",
+			name: "invalid token",
 			res: response{
 				status: 400,
-				body:   `{"kind":"invalid_lease","message":"the token is malformed"}`,
+				body:   `{"kind":"invalid_token","message":"the token is malformed"}`,
 			},
 			exp: &Error{
-				Kind:    ErrorKindInvalidLease,
+				Kind:    ErrorKindInvalidToken,
 				Message: "the token is malformed",
 			},
-			is: ErrInvalidLease,
+			is: ErrInvalidToken,
 		},
 		{
 			name: "dedup disabled",
@@ -215,16 +215,16 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrDedupClaimed,
 		},
 		{
-			name: "stale lease",
+			name: "stale token",
 			res: response{
 				status: 410,
-				body:   `{"kind":"stale_lease","message":"the lease is stale"}`,
+				body:   `{"kind":"stale_token","message":"the lease is stale"}`,
 			},
 			exp: &Error{
-				Kind:    ErrorKindStaleLease,
+				Kind:    ErrorKindStaleToken,
 				Message: "the lease is stale",
 			},
-			is: ErrStaleLease,
+			is: ErrStaleToken,
 		},
 		{
 			name: "payload too large",
@@ -498,10 +498,10 @@ func TestErrorResponse(t *testing.T) {
 						err, test.is,
 					)
 				}
-				if errors.Is(err, ErrStaleLease) && test.is != ErrStaleLease {
+				if errors.Is(err, ErrStaleToken) && test.is != ErrStaleToken {
 					t.Errorf(
 						"errors.Is(%v, %v) is true; want false",
-						err, ErrStaleLease,
+						err, ErrStaleToken,
 					)
 				}
 				if test.exp.Details != nil && !errors.As(err, ptrTo(test.exp.Details)) {
@@ -545,7 +545,7 @@ func TestErrorText(t *testing.T) {
 			// The server's message is complete; the kind is not prefixed.
 			name: "kind and message",
 			err: &Error{
-				Kind:    ErrorKindStaleLease,
+				Kind:    ErrorKindStaleToken,
 				Message: "the lease is stale",
 			},
 			exp: "the lease is stale",
@@ -553,9 +553,9 @@ func TestErrorText(t *testing.T) {
 		{
 			name: "kind alone",
 			err: &Error{
-				Kind: ErrorKindStaleLease,
+				Kind: ErrorKindStaleToken,
 			},
-			exp: "stale lease",
+			exp: "stale token",
 		},
 		{
 			name: "details stand in for a missing message",
@@ -677,7 +677,7 @@ func TestClientError(t *testing.T) {
 	var (
 		errBoom = errors.New("boom")
 		apiErr  = &Error{
-			Kind: ErrorKindStaleLease,
+			Kind: ErrorKindStaleToken,
 		}
 		urlErr = &url.Error{
 			Op:  "Post",
@@ -699,12 +699,12 @@ func TestClientError(t *testing.T) {
 		{
 			name: "the API's error is matched by its sentinel and nothing else",
 			err:  resultError(apiErr),
-			is:   []error{apiErr, ErrStaleLease},
+			is:   []error{apiErr, ErrStaleToken},
 			isNot: []error{
 				ErrQueueBusy,
 				errBoom,
 			},
-			text: "spooler: stale lease",
+			text: "spooler: stale token",
 		},
 		{
 			// A refused request matches the sentinel and keeps its reason.

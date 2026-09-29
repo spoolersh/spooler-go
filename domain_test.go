@@ -143,8 +143,8 @@ func TestEnumString(t *testing.T) {
 		},
 		{
 			name: "error kind",
-			v:    ErrorKindStaleLease,
-			exp:  "stale lease",
+			v:    ErrorKindStaleToken,
+			exp:  "stale token",
 		},
 		{
 			name: "an SDK-own error kind",
@@ -219,8 +219,8 @@ func TestToWire(t *testing.T) {
 		},
 		{
 			name: "error kind",
-			wire: ErrorKindStaleLease.toWire,
-			exp:  "stale_lease",
+			wire: ErrorKindStaleToken.toWire,
+			exp:  "stale_token",
 		},
 		{
 			name: "an SDK-own error kind has no wire name",

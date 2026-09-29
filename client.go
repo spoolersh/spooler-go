@@ -784,7 +784,7 @@ type AckAndSendResult struct {
 // and acks nothing.
 //
 // Unlike [Client.Send], a retry needs no dedup key: a retry of a call that
-// committed fails with [ErrStaleLease] and appends nothing.
+// committed fails with [ErrStaleToken] and appends nothing.
 func (c *Client) AckAndSend(ctx context.Context, req AckAndSendRequest) (AckAndSendResult, error) {
 	c.init()
 	if req.Spool == "" {
