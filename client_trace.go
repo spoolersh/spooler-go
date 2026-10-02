@@ -83,7 +83,7 @@ const (
 	OpRelease
 	OpFail
 	OpDiscard
-	OpPeek
+	OpInspect
 	OpRecover
 )
 
@@ -104,7 +104,7 @@ var opNames = map[Op]string{
 	OpRelease:       "Release",
 	OpFail:          "Fail",
 	OpDiscard:       "Discard",
-	OpPeek:          "Peek",
+	OpInspect:       "Inspect",
 	OpRecover:       "Recover",
 }
 

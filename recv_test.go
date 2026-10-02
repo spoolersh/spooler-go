@@ -293,11 +293,11 @@ func TestRecv(t *testing.T) {
 	})
 }
 
-func TestPeek(t *testing.T) {
-	testOp(t, (*Client).Peek, []opCase[PeekRequest, PeekResult]{
+func TestInspect(t *testing.T) {
+	testOp(t, (*Client).Inspect, []opCase[InspectRequest, InspectResult]{
 		{
-			name: "peeks a failed message",
-			req: PeekRequest{
+			name: "inspects a failed message",
+			req: InspectRequest{
 				Spool:  "default",
 				Handle: "handle-1",
 			},
@@ -305,7 +305,7 @@ func TestPeek(t *testing.T) {
 				{
 					req: request{
 						method: "POST",
-						path:   "/v1/spools/default/peek",
+						path:   "/v1/spools/default/inspect",
 						header: http.Header{
 							"Accept":         {"application/octet-stream"},
 							"Spooler-Handle": {"handle-1"},
@@ -322,7 +322,7 @@ func TestPeek(t *testing.T) {
 					},
 				},
 			},
-			exp: PeekResult{
+			exp: InspectResult{
 				ID:      "1-1",
 				State:   MessageStateFailed,
 				Retries: 5,
@@ -332,8 +332,8 @@ func TestPeek(t *testing.T) {
 		{
 			// A delayed message reads as visible once its delay elapsed; the
 			// state is whatever the server says now.
-			name: "peeks a visible message",
-			req: PeekRequest{
+			name: "inspects a visible message",
+			req: InspectRequest{
 				Spool:  "default",
 				Handle: "handle-1",
 			},
@@ -341,7 +341,7 @@ func TestPeek(t *testing.T) {
 				{
 					req: request{
 						method: "POST",
-						path:   "/v1/spools/default/peek",
+						path:   "/v1/spools/default/inspect",
 						header: http.Header{
 							"Accept":         {"application/octet-stream"},
 							"Spooler-Handle": {"handle-1"},
@@ -357,7 +357,7 @@ func TestPeek(t *testing.T) {
 					},
 				},
 			},
-			exp: PeekResult{
+			exp: InspectResult{
 				ID:    "1-1",
 				State: MessageStateVisible,
 			},
@@ -365,7 +365,7 @@ func TestPeek(t *testing.T) {
 		{
 			// Headers this SDK cannot read do not drop the payload.
 			name: "unreadable state and retry count",
-			req: PeekRequest{
+			req: InspectRequest{
 				Spool:  "default",
 				Handle: "handle-1",
 			},
@@ -373,7 +373,7 @@ func TestPeek(t *testing.T) {
 				{
 					req: request{
 						method: "POST",
-						path:   "/v1/spools/default/peek",
+						path:   "/v1/spools/default/inspect",
 						header: http.Header{
 							"Accept":         {"application/octet-stream"},
 							"Spooler-Handle": {"handle-1"},
@@ -390,7 +390,7 @@ func TestPeek(t *testing.T) {
 					},
 				},
 			},
-			exp: PeekResult{
+			exp: InspectResult{
 				ID:      "1-1",
 				Retries: -1,
 				Data:    []byte("poison"),
@@ -398,7 +398,7 @@ func TestPeek(t *testing.T) {
 		},
 		{
 			name: "a stale handle is a verdict",
-			req: PeekRequest{
+			req: InspectRequest{
 				Spool:  "default",
 				Handle: "handle-1",
 			},
@@ -406,7 +406,7 @@ func TestPeek(t *testing.T) {
 				{
 					req: request{
 						method: "POST",
-						path:   "/v1/spools/default/peek",
+						path:   "/v1/spools/default/inspect",
 						header: http.Header{
 							"Accept":         {"application/octet-stream"},
 							"Spooler-Handle": {"handle-1"},
@@ -422,14 +422,14 @@ func TestPeek(t *testing.T) {
 		},
 		{
 			name: "spool is required",
-			req: PeekRequest{
+			req: InspectRequest{
 				Handle: "handle-1",
 			},
 			expErr: errSpoolRequired,
 		},
 		{
 			name: "handle is required",
-			req: PeekRequest{
+			req: InspectRequest{
 				Spool: "default",
 			},
 			expErr: errHandleRequired,
@@ -535,15 +535,15 @@ func TestRecvWriter(t *testing.T) {
 	}
 }
 
-// TestPeekWriter is the writer path of Peek, for the same reason.
-func TestPeekWriter(t *testing.T) {
+// TestInspectWriter is the writer path of Inspect, for the same reason.
+func TestInspectWriter(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		c := new(Client)
 		done := stubWire(t, c, []exchange{
 			{
 				req: request{
 					method: "POST",
-					path:   "/v1/spools/default/peek",
+					path:   "/v1/spools/default/inspect",
 					header: http.Header{
 						"Accept":         {"application/octet-stream"},
 						"Spooler-Handle": {"handle-1"},
@@ -562,7 +562,7 @@ func TestPeekWriter(t *testing.T) {
 		})
 
 		var buf bytes.Buffer
-		act, err := c.Peek(t.Context(), PeekRequest{
+		act, err := c.Inspect(t.Context(), InspectRequest{
 			Spool:  "default",
 			Handle: "handle-1",
 			Writer: &buf,
@@ -574,7 +574,7 @@ func TestPeekWriter(t *testing.T) {
 				err,
 			)
 		}
-		exp := PeekResult{
+		exp := InspectResult{
 			ID:      "1-1",
 			State:   MessageStateFailed,
 			Retries: 5,

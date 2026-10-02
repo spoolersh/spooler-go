@@ -341,7 +341,7 @@ type QueueMessagesRequest struct {
 	After string
 
 	// ReturnHandle is an optional request for a handle on each message, for
-	// [Client.Peek], [Client.Recover] and [Client.Discard].
+	// [Client.Inspect], [Client.Recover] and [Client.Discard].
 	//
 	// A handle is a credential, so it is off by default.
 	ReturnHandle bool
@@ -1225,8 +1225,8 @@ func (c *Client) Discard(ctx context.Context, req DiscardRequest) error {
 	return resultError(err)
 }
 
-// PeekRequest describes a message to read, by its handle.
-type PeekRequest struct {
+// InspectRequest describes a message to read, by its handle.
+type InspectRequest struct {
 	// Spool is the spool the message is in.
 	Spool string
 
@@ -1234,12 +1234,12 @@ type PeekRequest struct {
 	Handle Handle
 
 	// Writer is an optional destination for the payload.
-	// Zero buffers the payload and returns it in PeekResult.Data instead.
+	// Zero buffers the payload and returns it in InspectResult.Data instead.
 	Writer io.Writer
 }
 
-// PeekResult is the outcome of a peek: the message as it is now.
-type PeekResult struct {
+// InspectResult is the outcome of an inspect: the message as it is now.
+type InspectResult struct {
 	// ID is the message id. It identifies the message in listings and logs.
 	// No operation takes it.
 	ID string
@@ -1255,15 +1255,15 @@ type PeekResult struct {
 	Data []byte
 }
 
-// Peek reads the message the handle names without moving it; the handle
+// Inspect reads the message the handle names without moving it; the handle
 // stays valid.
-func (c *Client) Peek(ctx context.Context, req PeekRequest) (PeekResult, error) {
+func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult, error) {
 	c.init()
 	if req.Spool == "" {
-		return zero[PeekResult](), errSpoolRequired
+		return zero[InspectResult](), errSpoolRequired
 	}
 	if req.Handle == "" {
-		return zero[PeekResult](), errHandleRequired
+		return zero[InspectResult](), errHandleRequired
 	}
 	var buf *bytes.Buffer
 	dst := req.Writer
@@ -1271,11 +1271,11 @@ func (c *Client) Peek(ctx context.Context, req PeekRequest) (PeekResult, error) 
 		buf = bytes.NewBuffer(nil)
 		dst = buf
 	}
-	rt := RequestTrace{Op: OpPeek, Spool: req.Spool}
+	rt := RequestTrace{Op: OpInspect, Spool: req.Spool}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
-		Path:     "/spools/" + req.Spool + "/peek",
+		Path:     "/spools/" + req.Spool + "/inspect",
 		Header: http.Header{
 			headerHandle: {string(req.Handle)},
 		},
@@ -1285,7 +1285,7 @@ func (c *Client) Peek(ctx context.Context, req PeekRequest) (PeekResult, error) 
 		},
 	})
 	if err != nil {
-		return zero[PeekResult](), resultError(err)
+		return zero[InspectResult](), resultError(err)
 	}
 	retries, err := parseRetries(res.Header)
 	if err != nil {
@@ -1296,7 +1296,7 @@ func (c *Client) Peek(ctx context.Context, req PeekRequest) (PeekResult, error) 
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
 	}
-	ret := PeekResult{
+	ret := InspectResult{
 		ID:      res.Header.Get(headerMessageID),
 		State:   state,
 		Retries: retries,

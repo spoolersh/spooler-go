@@ -648,25 +648,25 @@ func TestIntegrationFailed(t *testing.T) {
 				t.Fatalf("want a handle; got nothing")
 			}
 
-			// A peek reads it where it is and leaves the handle valid.
-			peeked, err := c.Peek(t.Context(), PeekRequest{
+			// An inspect reads it where it is and leaves the handle valid.
+			inspected, err := c.Inspect(t.Context(), InspectRequest{
 				Spool:  integrationSpool,
 				Handle: failed.Handle,
 			})
 			if err != nil {
 				t.Fatalf(
-					"peek: %v",
+					"inspect: %v",
 					err,
 				)
 			}
-			if diff := cmp.Diff(PeekResult{
+			if diff := cmp.Diff(InspectResult{
 				ID:      sent.ID,
 				State:   MessageStateFailed,
 				Retries: 0,
 				Data:    []byte("poison"),
-			}, peeked); diff != "" {
+			}, inspected); diff != "" {
 				t.Errorf(
-					"peek mismatch (-want +act):\n%s",
+					"inspect mismatch (-want +act):\n%s",
 					diff,
 				)
 			}
@@ -678,14 +678,14 @@ func TestIntegrationFailed(t *testing.T) {
 					err,
 				)
 			}
-			// The handle went stale with the move, for a peek as for a discard.
-			_, err = c.Peek(t.Context(), PeekRequest{
+			// The handle went stale with the move, for an inspect as for a discard.
+			_, err = c.Inspect(t.Context(), InspectRequest{
 				Spool:  integrationSpool,
 				Handle: failed.Handle,
 			})
 			if !errors.Is(err, ErrStaleToken) {
 				t.Errorf(
-					"peek with the used handle: %v; want %v",
+					"inspect with the used handle: %v; want %v",
 					err, ErrStaleToken,
 				)
 			}

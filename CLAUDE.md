@@ -304,7 +304,7 @@ addition:
 - Integration tests run against the local image when `SPOOLER_API` and
   `SPOOLER_KEY` are set and skip otherwise. CI starts `spoolersh/memspoold` for
   them. They exercise the send, receive, settle loop, dedup, delay,
-  ack-and-send, failed messages (list, peek, recover, discard), and lease
+  ack-and-send, failed messages (list, inspect, recover, discard), and lease
   expiry.
 - `go test ./...` before every hand-off; `go vet ./...` clean.
 
