@@ -82,6 +82,21 @@ type Client struct {
 	http *httputil.Client
 }
 
+// Clone returns a copy of c with its settings and none of its connections;
+// the copy opens its own on first use. Use it to run several clients from
+// one set of settings, since a Client must not be copied by value.
+func (c *Client) Clone() *Client {
+	return &Client{
+		Trace:              c.Trace,
+		Host:               c.Host,
+		APIKey:             c.APIKey,
+		Attempts:           c.Attempts,
+		InsecureDisableTLS: c.InsecureDisableTLS,
+		InsecureDebug:      c.InsecureDebug,
+		transport:          c.transport,
+	}
+}
+
 func (c *Client) init() {
 	c.once.Do(func() {
 		scheme := "https"

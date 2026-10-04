@@ -88,6 +88,94 @@ func TestClientAttempts(t *testing.T) {
 	}
 }
 
+// TestClientClone checks that a clone carries the settings and none of the
+// connections: a clone of a client already in use makes its requests through
+// its own transport, not the original's.
+func TestClientClone(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var orig, clone int
+		c := &Client{
+			Host:               "example.com:8443",
+			APIKey:             testKey,
+			Attempts:           3,
+			InsecureDisableTLS: true,
+			InsecureDebug:      false,
+		}
+		c.transport = &stubRoundTripper{
+			DoRoundTrip: func(r *http.Request) (*http.Response, error) {
+				orig++
+				return reply(r, response{
+					status: 204,
+				})
+			},
+		}
+		ack := func(c *Client) {
+			err := c.Ack(t.Context(), AckRequest{
+				Spool: "default",
+				Lease: "lease-1",
+			})
+			if err != nil {
+				t.Fatalf(
+					"unexpected error: %v",
+					err,
+				)
+			}
+		}
+		ack(c) // Opens the original's connections.
+
+		cc := c.Clone()
+		if act, exp := configOf(cc), configOf(c); act != exp {
+			t.Errorf(
+				"settings: %+v; want %+v",
+				act, exp,
+			)
+		}
+		if cc.http != nil {
+			t.Errorf("want no connections on the clone; got some")
+		}
+		cc.transport = &stubRoundTripper{
+			DoRoundTrip: func(r *http.Request) (*http.Response, error) {
+				clone++
+				return reply(r, response{
+					status: 204,
+				})
+			},
+		}
+		ack(cc)
+		if act, exp := orig, 1; act != exp {
+			t.Errorf(
+				"original requests: %d; want %d",
+				act, exp,
+			)
+		}
+		if act, exp := clone, 1; act != exp {
+			t.Errorf(
+				"clone requests: %d; want %d",
+				act, exp,
+			)
+		}
+	})
+}
+
+// settings is the exported part of a Client, comparable with ==.
+type settings struct {
+	Host               string
+	APIKey             string
+	Attempts           int
+	InsecureDisableTLS bool
+	InsecureDebug      bool
+}
+
+func configOf(c *Client) settings {
+	return settings{
+		Host:               c.Host,
+		APIKey:             c.APIKey,
+		Attempts:           c.Attempts,
+		InsecureDisableTLS: c.InsecureDisableTLS,
+		InsecureDebug:      c.InsecureDebug,
+	}
+}
+
 // TestClientSetup checks what the client's configuration becomes on the
 // wire: the scheme, the host and the version prefix, which the operation
 // tables do not look at.
