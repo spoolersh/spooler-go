@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -144,65 +142,6 @@ func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req htt
 		err = httpError(err)
 	}
 	return res, err
-}
-
-type clientError struct {
-	err error
-}
-
-func (e *clientError) Error() string {
-	var sb strings.Builder
-	sb.WriteString("spooler: ")
-	sb.WriteString(e.err.Error())
-	return sb.String()
-}
-
-// Unwrap exposes only what is contract: the API's [Error], a request the SDK
-// refused as [ErrInvalidRequest], and the context errors by their sentinel.
-// Anything else in the chain (a *url.Error, say) stays reachable as text only.
-func (e *clientError) Unwrap() error {
-	if x, ok := e.err.(*Error); ok {
-		return x
-	}
-	switch {
-	case errors.Is(e.err, ErrInvalidRequest):
-		return e.err
-	case errors.Is(e.err, context.Canceled):
-		return context.Canceled
-	case errors.Is(e.err, context.DeadlineExceeded):
-		return context.DeadlineExceeded
-	default:
-		return nil
-	}
-}
-
-// ErrInvalidRequest is what every request the SDK refuses before sending.
-// Matches with [errors.Is]: a required field missing, or two that exclude each
-// other both set. The text says which.
-var ErrInvalidRequest = errors.New("invalid request")
-
-// invalidRequest wraps a refusal so that it matches ErrInvalidRequest.
-func invalidRequest(msg string) error {
-	return resultError(fmt.Errorf("%w: %s", ErrInvalidRequest, msg))
-}
-
-var (
-	errSpoolRequired     = invalidRequest("spool name is required")
-	errQueueRequired     = invalidRequest("queue name is required")
-	errDataAndDataSource = invalidRequest("either Data or DataSource is required, not both")
-	errLeaseRequired     = invalidRequest("lease is required")
-	errLeaseAndHandle    = invalidRequest("either lease or handle is required, not both")
-	errLeaseOrHandle     = invalidRequest("either lease or handle is required")
-	errHandleRequired    = invalidRequest("handle is required")
-)
-
-func resultError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return &clientError{
-		err: err,
-	}
 }
 
 // SpoolStatsRequest describes a spool to read, and the pagination of its
