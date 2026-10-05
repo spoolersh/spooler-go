@@ -3,7 +3,6 @@ package spooler
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"strconv"
 	"time"
 )
@@ -592,18 +591,6 @@ func transform[K comparable, A, B any](m map[K]A, f func(A) B) map[K]B {
 	}
 	return ret
 }
-func merge[K comparable, V any](ms ...map[K]V) map[K]V {
-	var n int
-	for _, m := range ms {
-		n += len(m)
-	}
-	ret := make(map[K]V, n)
-	for _, m := range ms {
-		maps.Copy(ret, m)
-	}
-	return ret
-}
-
 func toWire[T, W comparable](m map[T]W, v T) (w W, err error) {
 	ret, has := m[v]
 	if !has {

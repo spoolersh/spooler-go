@@ -147,11 +147,6 @@ func TestEnumString(t *testing.T) {
 			exp:  "stale token",
 		},
 		{
-			name: "an SDK-own error kind",
-			v:    ErrorKindUnavailable,
-			exp:  "unavailable",
-		},
-		{
 			name: "unknown error kind",
 			v:    ErrorKind(99),
 			exp:  "ErrorKind(99)",
@@ -221,11 +216,6 @@ func TestToWire(t *testing.T) {
 			name: "error kind",
 			wire: ErrorKindStaleToken.toWire,
 			exp:  "stale_token",
-		},
-		{
-			name: "an SDK-own error kind has no wire name",
-			wire: ErrorKindUnavailable.toWire,
-			err:  true,
 		},
 		{
 			name: "spool limit",

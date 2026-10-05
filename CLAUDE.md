@@ -129,13 +129,15 @@ is not repeated here. What follows is only the SDK's side of it.
   details also offers its type through `errors.As`. Which kinds exist and
   what each carries is the docs' errors page, not this file.
 - The error never carries a status: the SDK is transport-agnostic, and a
-  status is HTTP's. A condition the API reports without a kind gets a kind
-  of the SDK's own, mapped inside the transport layer, so callers match a
-  sentinel like any other. A kind this SDK does not know is treated as no
-  kind, so that mapping still applies and code matching the broader sentinel
-  keeps working when the server refines it. What neither names is
-  ErrorKindUnknown, and only there does the status appear, as prose in the
-  message, for a person to read. Callers never parse the message.
+  status is HTTP's. Kinds are the API's, one to one with the docs' table;
+  the SDK invents none. A condition the API reports by status alone is a
+  sentinel of the SDK's own (`ErrUnauthorized`, `ErrSuspended`,
+  `ErrForbidden`, `ErrUnavailable`, like `ErrResultUnknown`), derived at the
+  transport boundary and matched with `errors.Is`, never a kind. It matches
+  whatever kind the answer carries, so code matching it keeps working when
+  the server adds a kind to the status. An answer with no kind this SDK
+  knows is ErrorKindUnknown, and only there does the status appear, as prose
+  in the message, for a person to read. Callers never parse the message.
 - Text is for people, fields are for programs. An error prints as its kind
   followed by the server's message, which already states the facts;
   `Details` is for programmatic access only, through `errors.As`, and is

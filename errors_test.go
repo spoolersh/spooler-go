@@ -316,31 +316,29 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrSpoolFull,
 		},
 		{
-			name: "bad credentials have no kind and get the SDK's own",
+			name: "bad credentials have no kind and match the status sentinel",
 			res: response{
 				status: 401,
 				body:   `{"message":"bad credentials"}`,
 			},
 			exp: &Error{
-				Kind:    ErrorKindUnauthorized,
-				Message: "bad credentials",
+				Message: "401 Unauthorized: bad credentials",
 			},
 			is: ErrUnauthorized,
 		},
 		{
-			name: "a suspended account has no kind and gets the SDK's own",
+			name: "a suspended account has no kind and matches the status sentinel",
 			res: response{
 				status: 402,
 				body:   `{"message":"the account is suspended"}`,
 			},
 			exp: &Error{
-				Kind:    ErrorKindSuspended,
-				Message: "the account is suspended",
+				Message: "402 Payment Required: the account is suspended",
 			},
 			is: ErrSuspended,
 		},
 		{
-			name: "an unavailable spool has no kind and gets the SDK's own, with the delay",
+			name: "an unavailable spool has no kind and matches the status sentinel, with the delay",
 			res: response{
 				status: 503,
 				header: http.Header{
@@ -350,22 +348,20 @@ func TestErrorResponse(t *testing.T) {
 			},
 			times: 2,
 			exp: &Error{
-				Kind:       ErrorKindUnavailable,
-				Message:    "the spool is momentarily unavailable",
+				Message:    "503 Service Unavailable: the spool is momentarily unavailable",
 				RetryAfter: 5 * time.Second,
 			},
 			is: ErrUnavailable,
 		},
 		{
-			name: "a kind this SDK does not know on a mapped status still matches the broader sentinel",
+			name: "a kind this SDK does not know on a status with a sentinel still matches it",
 			res: response{
 				status: 503,
 				body:   `{"kind":"maintenance","message":"back in five"}`,
 			},
 			times: 2,
 			exp: &Error{
-				Kind:    ErrorKindUnavailable,
-				Message: "back in five",
+				Message: "503 Service Unavailable (kind maintenance): back in five",
 			},
 			is: ErrUnavailable,
 		},
@@ -390,14 +386,13 @@ func TestErrorResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "a blocked key has no kind and gets the SDK's own",
+			name: "a blocked key has no kind and matches the status sentinel",
 			res: response{
 				status: 403,
 				body:   `{"message":"the key is blocked"}`,
 			},
 			exp: &Error{
-				Kind:    ErrorKindForbidden,
-				Message: "the key is blocked",
+				Message: "403 Forbidden: the key is blocked",
 			},
 			is: ErrForbidden,
 		},

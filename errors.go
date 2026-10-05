@@ -19,10 +19,10 @@ import (
 // errors.Is(err, [ErrQueueNotFound]). The message is for people; a program
 // acts on the kind, the details and RetryAfter.
 type Error struct {
-	// Kind is what went wrong, as the API names it, or a kind of the SDK's
-	// own for the conditions the API answers by status alone. It is
-	// ErrorKindUnknown for a kind this SDK does not know, whose wire name
-	// is then kept in the message.
+	// Kind is what went wrong, as the API names it. It is ErrorKindUnknown
+	// for an answer without a kind, such as one the API gives by status
+	// alone, and for a kind this SDK does not know, whose wire name is then
+	// kept in the message.
 	Kind ErrorKind
 
 	// Message is the server's text, complete on its own.
@@ -88,8 +88,9 @@ var ErrResultUnknown = errors.New("result unknown")
 type clientError struct {
 	err error
 
-	// resultUnknown reports whether the failure matches ErrResultUnknown.
-	resultUnknown bool
+	// conds are the conditions the failure matches beyond its kind:
+	// ErrResultUnknown and the status sentinels, such as ErrUnauthorized.
+	conds []error
 }
 
 func (e *clientError) Error() string {
@@ -101,17 +102,14 @@ func (e *clientError) Error() string {
 
 // Unwrap exposes only what is contract: the API's [Error], a request the SDK
 // refused as [ErrInvalidRequest], the context errors by their sentinel, and
-// [ErrResultUnknown]. Anything else in the chain (a *url.Error, say) stays
-// reachable as text only.
+// the conditions, such as [ErrResultUnknown] and [ErrUnauthorized]. Anything
+// else in the chain (a *url.Error, say) stays reachable as text only.
 func (e *clientError) Unwrap() []error {
 	var errs []error
 	if x := e.contract(); x != nil {
 		errs = append(errs, x)
 	}
-	if e.resultUnknown {
-		errs = append(errs, ErrResultUnknown)
-	}
-	return errs
+	return append(errs, e.conds...)
 }
 
 // contract returns the contract error the cause carries, or nil.
@@ -166,8 +164,9 @@ var (
 )
 
 // ErrorKind is what an [Error] reports went wrong: the API's kinds, as
-// https://docs.spooler.sh/errors lists them, plus the SDK's own for the
-// conditions the API answers by status alone.
+// https://docs.spooler.sh/errors lists them, and nothing else. A condition
+// the API answers by status alone is no kind but a sentinel of its own, such
+// as [ErrUnauthorized].
 type ErrorKind uint
 
 const (
@@ -209,19 +208,6 @@ const (
 	ErrorKindOperationUnconfirmed
 	// ErrorKindSpoolFull is the API's spool_full kind.
 	ErrorKindSpoolFull
-
-	// The kinds below are the SDK's own. The API answers these conditions
-	// without a kind, so they have no wire name; the transport maps them.
-
-	// ErrorKindUnauthorized is an API key that is missing or not
-	// recognized.
-	ErrorKindUnauthorized
-	// ErrorKindSuspended is a suspended account.
-	ErrorKindSuspended
-	// ErrorKindForbidden is a blocked API key.
-	ErrorKindForbidden
-	// ErrorKindUnavailable is a spool momentarily unavailable.
-	ErrorKindUnavailable
 )
 
 var (
@@ -245,25 +231,16 @@ var (
 		ErrorKindStaleToken:           "stale_token",
 		ErrorKindUnknownHeader:        "unknown_header",
 	}
-	errorKind2string = merge(
-		transform(errorKind2wire, func(s string) string {
-			return strings.ReplaceAll(s, "_", " ")
-		}),
-		map[ErrorKind]string{
-			ErrorKindUnauthorized: "unauthorized",
-			ErrorKindSuspended:    "suspended",
-			ErrorKindForbidden:    "forbidden",
-			ErrorKindUnavailable:  "unavailable",
-		},
-	)
+	errorKind2string = transform(errorKind2wire, func(s string) string {
+		return strings.ReplaceAll(s, "_", " ")
+	})
 	errorKind4wire = reverse(errorKind2wire)
 )
 
 func (k ErrorKind) toWire() (string, error)  { return toWire(errorKind2wire, k) }
 func (k *ErrorKind) fromWire(w string) error { return fromWire(errorKind4wire, k, w) }
 
-// String names the kind as [Error] prints it, which unlike the wire name also
-// covers the kinds of the SDK's own.
+// String names the kind as [Error] prints it: its wire name in words.
 func (k ErrorKind) String() string { return enumString("ErrorKind", errorKind2string, k) }
 
 // KindError is a sentinel that every [Error] of its kind matches with
@@ -304,11 +281,24 @@ var (
 	ErrRateLimited          = &KindError{Kind: ErrorKindRateLimited}
 	ErrOperationUnconfirmed = &KindError{Kind: ErrorKindOperationUnconfirmed}
 	ErrSpoolFull            = &KindError{Kind: ErrorKindSpoolFull}
+)
 
-	ErrUnauthorized = &KindError{Kind: ErrorKindUnauthorized}
-	ErrSuspended    = &KindError{Kind: ErrorKindSuspended}
-	ErrForbidden    = &KindError{Kind: ErrorKindForbidden}
-	ErrUnavailable  = &KindError{Kind: ErrorKindUnavailable}
+// The conditions the API answers by status alone, per https://docs.spooler.sh/errors.
+// They are not kinds.
+var (
+	// ErrUnauthorized matches bad credentials: an API key that is missing or
+	// not recognized.
+	ErrUnauthorized = errors.New("unauthorized")
+
+	// ErrSuspended matches a suspended account.
+	ErrSuspended = errors.New("suspended")
+
+	// ErrForbidden matches a blocked API key.
+	ErrForbidden = errors.New("forbidden")
+
+	// ErrUnavailable matches a spool momentarily unavailable.
+	// Retrying is safe.
+	ErrUnavailable = errors.New("unavailable")
 )
 
 // UnknownHeaderError is the details of an [ErrorKindUnknownHeader] answer.
@@ -544,10 +534,9 @@ func (e *spoolFullError) toError() *SpoolFullError {
 // response that carried an error body becomes the Error it describes; one
 // that did not (a gateway's 502, say) carries its raw body as the message.
 //
-// This is the one place a status is read. Where the response names no kind
-// this SDK knows, statusKind maps the status to a kind of the SDK's own. If
-// that finds nothing either, the kind stays unknown and the status goes into
-// the message as prose, never into a field.
+// Where the response names no kind this SDK knows, the kind stays unknown and
+// the status goes into the message as prose, never into a field; the
+// conditions a status signals are statusCondition's.
 //
 // Any other error is returned as is, for resultError to wrap.
 func httpError(err error) error {
@@ -567,29 +556,30 @@ func httpError(err error) error {
 		e.RetryAfter, _ = httputil.ParseRetryAfter(time.Now(), s)
 	}
 	if e.Kind == ErrorKindUnknown {
-		e.Kind = statusKind(se.Code)
-	}
-	if e.Kind == ErrorKindUnknown {
 		e.Message = statusProse(se.Code, wireKind, e.Message)
 	}
 	return e
 }
 
-// statusKind maps a status the API answers without a kind to the SDK's own
-// kind for it, or to ErrorKindUnknown. A 411 is not here: the SDK always
-// sends a length.
-func statusKind(code int) ErrorKind {
-	switch code {
+// statusCondition returns the sentinel of the condition the status of err's
+// last attempt signals, whatever kind the answer carried, or nil. A 411 is
+// not here: the SDK always sends a length.
+func statusCondition(err error) error {
+	se, ok := errors.AsType[*httputil.StatusError](err)
+	if !ok {
+		return nil
+	}
+	switch se.Code {
 	case http.StatusUnauthorized:
-		return ErrorKindUnauthorized
+		return ErrUnauthorized
 	case http.StatusPaymentRequired:
-		return ErrorKindSuspended
+		return ErrSuspended
 	case http.StatusForbidden:
-		return ErrorKindForbidden
+		return ErrForbidden
 	case http.StatusServiceUnavailable:
-		return ErrorKindUnavailable
+		return ErrUnavailable
 	default:
-		return ErrorKindUnknown
+		return nil
 	}
 }
 

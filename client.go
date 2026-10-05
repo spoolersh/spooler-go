@@ -162,9 +162,16 @@ func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req htt
 	res, err = c.http.Do(ctx, method, req)
 	if err != nil {
 		// Classified before httpError, which drops the status.
+		var conds []error
+		if cond := statusCondition(err); cond != nil {
+			conds = append(conds, cond)
+		}
+		if resultUnknown(err) {
+			conds = append(conds, ErrResultUnknown)
+		}
 		err = &clientError{
-			err:           httpError(err),
-			resultUnknown: resultUnknown(err),
+			err:   httpError(err),
+			conds: conds,
 		}
 	}
 	return res, err
