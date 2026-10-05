@@ -64,6 +64,18 @@ is not repeated here. What follows is only the SDK's side of it.
   call some retries harmless without asking any client to make them. The retry
   functions cite the docs' table they implement, and a change there is made by
   re-reading that table, never from memory or from this file.
+- **The SDK retries an unknown result only when the request asks.** By
+  default a failure is retried only if the docs say it changed nothing and
+  declare it transient. An attempt whose result is unknown is retried only
+  when the request sets `RetryUnknown` (`SendRequest`, `AckAndSendRequest`),
+  and its doc states plainly what a retry may cause, never a condition that
+  makes it safe: for a send, a possible second message with its own id; for
+  an ack-and-send, nothing appended twice. The SDK never claims a retry is
+  safe on timing it cannot check (a dedup window, a deadline); the designs
+  that did were dropped, see TODO.md. A call's error carries every attempt's
+  failure (`httputil.AttemptErrors`) and matches `ErrResultUnknown` if any
+  attempt left the result unknown: no later failure settles that, only a
+  success does.
 
 ## Shape of the SDK (decided upstream, do not relitigate)
 
@@ -168,7 +180,10 @@ is not repeated here. What follows is only the SDK's side of it.
   - errors are translated at the boundary into the SDK's error type. A
     transport error (`*url.Error`, the internal status error) is not
     returned and not reachable through `Unwrap`; only `context` errors stay
-    matchable with `errors.Is`;
+    matchable with `errors.Is`. **This holds for every error that leaves
+    the package, a hook's argument included:** a hook receives the very
+    error the operation returns, never an internal error or one translated
+    differently, so a hook and the caller always match the same sentinels;
   - names and docs describe intent, not the wire: a field is not named for
     a query parameter or a header, though its comment may cite one.
   `context`, `io`, `time` and `log/slog` types are fine: they are not the
@@ -195,7 +210,10 @@ maintained by the project owner: never read, edit, or generate them.** Hook
 conventions: verb-named hooks that carry the error (`OnSend(..., err error)`),
 the hook deferred at the top of the function it reports, typed codes not
 strings, `.String()` only at log sites, secrets (keys, leases, handles) never
-passed to a hook.
+passed to a hook. **An error passed to a hook is the error the operation
+returns**, built once at the transport boundary (`Client.do`), so no internal
+error leaks through a hook and a hook never reads an error differently from
+the caller.
 
 ## Coding style
 

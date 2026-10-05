@@ -36,3 +36,32 @@ idiom; the primitives remain the bounded calls, as `net.Conn.Read` is under
 
 - [ ] Examples: a consumer loop with `Consume`, and a listing with `Messages`
   that acts on a handle.
+
+## Retrying an unknown result (decided 2026-10-05)
+
+Adopted: `RetryUnknown bool` on `SendRequest` and `AckAndSendRequest`. The SDK
+retries an unknown result only when the request asks, and promises nothing
+about safety: a send may append twice (a new message with its own id); an
+ack-and-send never does. Neither
+the README nor the examples teach a retry loop: any loop leaning on the dedup
+window carries a tail risk (a retry reaching the server after the window) the
+SDK cannot remove. The plain settles have no field: an unknown settle resolves
+through redelivery or lease expiry anyway; add one if users ask. Weighed and
+dropped, so that it is not argued afresh:
+
+- A helper (`SendWithRetry`, not `TrySend`: the standard library's `Try*`
+  is one non-blocking attempt). Re-implements from outside the loop the
+  transport runs, and cannot replay a stream payload.
+- A request field, `SendRequest.RetryUnknownFor time.Duration`, built and
+  removed: the time could not be stated as a guarantee. A retry can reach
+  the server arbitrarily late, so the best contract was a tolerance (a retry
+  later than window minus time can append again), which the SDK would co-sign.
+- A request field `RetryUnknown func() bool`: the caller decides each retry,
+  which left the SDK only payload replay and backoff for a public contract.
+- An option on `Client`, or `Send(ctx, req, opts...)`: the window is per
+  queue and per key history, not per client; options add a second way to pass
+  parameters for one behaviour.
+
+Kept from the work: `ErrResultUnknown` on any 5xx but 503 and 507 and on a
+response lost after it may have been sent; `httputil.AttemptErrors`; the early
+end of a wait the context's deadline would not outlive.

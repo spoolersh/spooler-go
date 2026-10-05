@@ -249,7 +249,8 @@ func TestSend(t *testing.T) {
 			expErr: ErrOperationUnconfirmed,
 		},
 		{
-			name: "a keyed send is retried when the append may have happened",
+			// Safe to retry with the key, but not certain: the caller retries.
+			name: "a keyed send is not retried when the append may have happened",
 			req: SendRequest{
 				Spool: "default",
 				Queue: "jobs",
@@ -272,28 +273,8 @@ func TestSend(t *testing.T) {
 						body:   `{"kind":"operation_unconfirmed","message":"durability is unknown"}`,
 					},
 				},
-				{
-					req: request{
-						method: "POST",
-						path:   "/v1/spools/default/queues/jobs/send",
-						header: http.Header{
-							"Content-Type":         {"application/octet-stream"},
-							"Spooler-Dedup-String": {"order-1"},
-						},
-						body: "hello",
-					},
-					res: response{
-						status: 200,
-						header: http.Header{
-							"Spooler-Message-Id": {"1-1"},
-						},
-					},
-				},
 			},
-			exp: SendResult{
-				ID:        "1-1",
-				Duplicate: true,
-			},
+			expErr: ErrResultUnknown,
 		},
 		{
 			name: "an unkeyed send is retried when nothing was appended",
@@ -503,7 +484,141 @@ func TestSend(t *testing.T) {
 					},
 				},
 			},
-			err: true,
+			expErr: ErrResultUnknown,
+		},
+		{
+			name: "a keyed send with no response at all is not retried",
+			req: SendRequest{
+				Spool: "default",
+				Queue: "jobs",
+				Dedup: DedupString("order-1"),
+				Data:  []byte("hello"),
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/send",
+						header: http.Header{
+							"Content-Type":         {"application/octet-stream"},
+							"Spooler-Dedup-String": {"order-1"},
+						},
+						body: "hello",
+					},
+					res: response{
+						err: errors.New("connection reset"),
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
+		},
+		{
+			// The first attempt may have appended too: the caller accepted that.
+			name: "an unknown result is retried when the request asks",
+			req: SendRequest{
+				Spool:        "default",
+				Queue:        "jobs",
+				Data:         []byte("hello"),
+				RetryUnknown: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/send",
+						header: http.Header{
+							"Content-Type": {"application/octet-stream"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 504,
+					},
+				},
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/send",
+						header: http.Header{
+							"Content-Type": {"application/octet-stream"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 201,
+						header: http.Header{
+							"Spooler-Message-Id": {"1-2"},
+						},
+					},
+				},
+			},
+			exp: SendResult{
+				ID: "1-2",
+			},
+		},
+		{
+			name: "a verdict after a retried unknown result leaves it unknown",
+			req: SendRequest{
+				Spool:        "default",
+				Queue:        "jobs",
+				Data:         []byte("hello"),
+				RetryUnknown: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/send",
+						header: http.Header{
+							"Content-Type": {"application/octet-stream"},
+						},
+						body: "hello",
+					},
+					res: response{
+						err: errors.New("connection reset"),
+					},
+				},
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/send",
+						header: http.Header{
+							"Content-Type": {"application/octet-stream"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 507,
+						body:   `{"kind":"spool_full","message":"the spool is full","details":{"limit":"messages"}}`,
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
+		},
+		{
+			name: "a one-shot payload is sent once even when the request asks",
+			req: SendRequest{
+				Spool:        "default",
+				Queue:        "jobs",
+				DataSource:   DataSourceReader(strings.NewReader("hello"), 5),
+				RetryUnknown: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/send",
+						header: http.Header{
+							"Content-Type": {"application/octet-stream"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 504,
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
 		},
 		{
 			name: "data and a data source together are refused before any request",
@@ -565,6 +680,127 @@ func TestAckAndSend(t *testing.T) {
 			exp: AckAndSendResult{
 				ID: "1-2",
 			},
+		},
+		{
+			name: "an unknown result is retried when the request asks",
+			req: AckAndSendRequest{
+				Spool:        "default",
+				Lease:        "lease-1",
+				Queue:        "done",
+				Data:         []byte("hello"),
+				RetryUnknown: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/ack-and-send",
+						header: http.Header{
+							"Content-Type":  {"application/octet-stream"},
+							"Spooler-Lease": {"lease-1"},
+							"Spooler-Queue": {"done"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 504,
+					},
+				},
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/ack-and-send",
+						header: http.Header{
+							"Content-Type":  {"application/octet-stream"},
+							"Spooler-Lease": {"lease-1"},
+							"Spooler-Queue": {"done"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 201,
+						header: http.Header{
+							"Spooler-Message-Id": {"1-2"},
+						},
+					},
+				},
+			},
+			exp: AckAndSendResult{
+				ID: "1-2",
+			},
+		},
+		{
+			// A retry of a call that committed answers 410 and appends nothing;
+			// the first attempt's outcome stays unproven.
+			name: "a retried call that had committed stays unknown",
+			req: AckAndSendRequest{
+				Spool:        "default",
+				Lease:        "lease-1",
+				Queue:        "done",
+				Data:         []byte("hello"),
+				RetryUnknown: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/ack-and-send",
+						header: http.Header{
+							"Content-Type":  {"application/octet-stream"},
+							"Spooler-Lease": {"lease-1"},
+							"Spooler-Queue": {"done"},
+						},
+						body: "hello",
+					},
+					res: response{
+						err: errors.New("connection reset"),
+					},
+				},
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/ack-and-send",
+						header: http.Header{
+							"Content-Type":  {"application/octet-stream"},
+							"Spooler-Lease": {"lease-1"},
+							"Spooler-Queue": {"done"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 410,
+						body:   `{"kind":"stale_token","message":"the lease is stale"}`,
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
+		},
+		{
+			name: "an unknown result is not retried unless the request asks",
+			req: AckAndSendRequest{
+				Spool: "default",
+				Lease: "lease-1",
+				Queue: "done",
+				Data:  []byte("hello"),
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/ack-and-send",
+						header: http.Header{
+							"Content-Type":  {"application/octet-stream"},
+							"Spooler-Lease": {"lease-1"},
+							"Spooler-Queue": {"done"},
+						},
+						body: "hello",
+					},
+					res: response{
+						status: 504,
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
 		},
 		{
 			name: "acks and sends an empty message",

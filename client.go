@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -60,8 +61,12 @@ type Client struct {
 	APIKey string
 
 	// Attempts is how many times at most an operation is tried before its
-	// error is returned, the initial request included. Some operations or
-	// errors are not retried regardless of the value.
+	// error is returned, the initial request included. Only a failure the
+	// docs class as transient and as having changed nothing is retried; one
+	// that leaves the result unknown is returned at once, matching
+	// [ErrResultUnknown], unless the request sets RetryUnknown, as
+	// [SendRequest] and [AckAndSendRequest] can. An application with a retry
+	// policy of its own can set 1.
 	//
 	// Zero means [DefaultAttempts], 1 makes no retries.
 	Attempts int
@@ -146,7 +151,9 @@ func (c *Client) attempts() int {
 }
 
 // do makes one operation's request, reporting it to the trace as a whole:
-// the hook fires once here, however many attempts the transport makes.
+// the hook fires once here, however many attempts the transport makes. Its
+// error is the one the operation returns, so the hook and the caller see the
+// same.
 func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req httputil.Request) (res httputil.Response, err error) {
 	done := c.Trace.onRequest(ctx, rt)
 	defer func() {
@@ -154,7 +161,11 @@ func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req htt
 	}()
 	res, err = c.http.Do(ctx, method, req)
 	if err != nil {
-		err = httpError(err)
+		// Classified before httpError, which drops the status.
+		err = &clientError{
+			err:           httpError(err),
+			resultUnknown: resultUnknown(err),
+		}
 	}
 	return res, err
 }
@@ -601,6 +612,17 @@ type SendRequest struct {
 	//
 	// A handle is a credential, so it is off by default.
 	ReturnHandle bool
+
+	// RetryUnknown is an optional request to retry an attempt whose result is
+	// unknown, within the attempts [Client.Attempts] allows. Such a retry can
+	// append the message a second time, as a new message with its own id:
+	// consumers whose effect is idempotent absorb it, those that only track
+	// handled message ids do not. With Dedup, a retry the queue's dedup window
+	// still remembers appends nothing new. A payload from [DataSourceReader] is
+	// still sent once.
+	//
+	// Zero retries no attempt whose result is unknown.
+	RetryUnknown bool
 }
 
 // SendResult is the outcome of a send.
@@ -663,10 +685,14 @@ func (c *Client) Send(ctx context.Context, req SendRequest) (SendResult, error) 
 	if data == nil && len(req.Data) > 0 {
 		data = bytes.NewReader(req.Data)
 	}
+	retry := retrySend
+	if req.RetryUnknown {
+		retry = retrySendUnknown
+	}
 	rt := RequestTrace{Op: OpSend, Spool: req.Spool, Queue: req.Queue}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
-		Retry:    retrySend(!req.Dedup.IsZero()),
+		Retry:    retry,
 		Path:     "/spools/" + req.Spool + "/queues/" + req.Queue + "/send",
 		Query:    query,
 		Header:   header,
@@ -720,6 +746,18 @@ type AckAndSendRequest struct {
 	//
 	// A handle is a credential, so it is off by default.
 	ReturnHandle bool
+
+	// RetryUnknown is an optional request to retry an attempt whose result is
+	// unknown, within the attempts [Client.Attempts] allows. Unlike
+	// [SendRequest.RetryUnknown], such a retry never appends twice, with or
+	// without a dedup key: one after a call that committed fails with
+	// [ErrStaleToken] and appends nothing. The error then also matches
+	// [ErrResultUnknown], since that answer does not prove the first attempt
+	// succeeded; check it first. A payload from [DataSourceReader] is still
+	// sent once.
+	//
+	// Zero retries no attempt whose result is unknown.
+	RetryUnknown bool
 }
 
 // AckAndSendResult is the outcome of an ack-and-send.
@@ -774,10 +812,14 @@ func (c *Client) AckAndSend(ctx context.Context, req AckAndSendRequest) (AckAndS
 	if data == nil && len(req.Data) > 0 {
 		data = bytes.NewReader(req.Data)
 	}
+	retry := retrySend
+	if req.RetryUnknown {
+		retry = retrySendUnknown
+	}
 	rt := RequestTrace{Op: OpAckAndSend, Spool: req.Spool, Queue: req.Queue}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
-		Retry:    retrySend(!req.Dedup.IsZero()),
+		Retry:    retry,
 		Path:     "/spools/" + req.Spool + "/ack-and-send",
 		Query:    query,
 		Header:   header,
@@ -1314,7 +1356,11 @@ func errorKindOf(e *httputil.StatusError) ErrorKind {
 // retry decides for settles and reads. It retries what the errors table at
 // https://docs.spooler.sh/errors marks transient, and nothing else: that a
 // retry would be harmless does not make a failure transient.
-func retry(e *httputil.StatusError) bool {
+func retry(err error) bool {
+	e, ok := errors.AsType[*httputil.StatusError](err)
+	if !ok {
+		return false
+	}
 	if errorKindOf(e) == ErrorKindQueueBusy {
 		return true
 	}
@@ -1328,29 +1374,77 @@ func retry(e *httputil.StatusError) bool {
 	}
 }
 
-// retrySend decides for the operations that append, per "Retrying a send" at
-// https://docs.spooler.sh/errors.
-func retrySend(hasDedup bool) func(*httputil.StatusError) bool {
-	return func(e *httputil.StatusError) bool {
-		if errorKindOf(e) == ErrorKindDedupInFlight {
+// retrySend decides for the operations that append, per "Retrying a change"
+// at https://docs.spooler.sh/errors. Like retry, it retries only what changed
+// nothing: a result left unknown is the caller's to retry, with its dedup key.
+func retrySend(err error) bool {
+	e, ok := errors.AsType[*httputil.StatusError](err)
+	if !ok {
+		return false
+	}
+	if errorKindOf(e) == ErrorKindDedupInFlight {
+		return true
+	}
+	switch e.Code {
+	case
+		http.StatusServiceUnavailable,
+		http.StatusTooManyRequests:
+
+		return true
+	default:
+		return false
+	}
+}
+
+// retrySendUnknown decides for an append whose request sets RetryUnknown: what
+// retrySend retries, and an attempt whose result is unknown.
+func retrySendUnknown(err error) bool {
+	return retrySend(err) || attemptUnknown(err)
+}
+
+// resultUnknown reports whether any attempt of a call leaves open that the
+// operation's change happened, per "Retrying a change" at
+// https://docs.spooler.sh/errors. Once one did, no later failure settles it;
+// only a success does, and a success is no error.
+func resultUnknown(err error) bool {
+	attempts, ok := errors.AsType[httputil.AttemptErrors](err)
+	if !ok {
+		return false
+	}
+	for _, err := range attempts {
+		if attemptUnknown(err) {
 			return true
 		}
-		switch e.Code {
-		case
-			http.StatusBadGateway,
-			http.StatusGatewayTimeout,
-			http.StatusInternalServerError:
-			// Retry these only when dedup key is set.
-			return hasDedup
+	}
+	return false
+}
 
-		case
-			http.StatusServiceUnavailable,
-			http.StatusTooManyRequests:
-			return true
-
-		default:
+// attemptUnknown reports whether one attempt's failure leaves open that the
+// change happened.
+func attemptUnknown(err error) bool {
+	switch e := err.(type) {
+	case *httputil.StatusError:
+		switch {
+		case e.Code < 500:
 			return false
+		case
+			e.Code == http.StatusInsufficientStorage,
+			e.Code == http.StatusServiceUnavailable:
+
+			// The docs answer these before the change is attempted.
+			return false
+		default:
+			// Any other 5xx, an unlisted one included, may have changed:
+			// an unknown status is read by its class.
+			return true
 		}
+	case *httputil.TransportError:
+		return e.Sent
+	case *httputil.BodyError:
+		// The server answered with success; only the answer was lost.
+		return true
+	default:
+		return false
 	}
 }
 

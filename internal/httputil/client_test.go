@@ -101,6 +101,11 @@ type (
 
 var errBoom = errors.New("boom")
 
+// retryAll is a retry policy that retries every failure.
+func retryAll(error) bool {
+	return true
+}
+
 func TestDo(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -119,16 +124,18 @@ func TestDo(t *testing.T) {
 		method      string
 		req         Request
 		recv        bool
-		cancelAfter int // Cancel the context once this many requests were made.
+		cancelAfter int           // Cancel the context once this many requests were made.
+		timeout     time.Duration // Put a deadline this far ahead on the context, when set.
 
 		wire []exchange
 
-		exp       Response
-		expRecv   string
-		expStatus *StatusError // Compared on Code, Body and Desc.
-		expErr    error        // Matched with errors.Is.
-		err       bool         // Presence only.
-		elapsed   time.Duration
+		exp         Response
+		expRecv     string
+		expStatus   *StatusError // Compared on Code, Body and Desc.
+		expErr      error        // Matched with errors.Is.
+		err         bool         // Presence only.
+		expAttempts int          // The failures AttemptErrors holds, when set.
+		elapsed     time.Duration
 	}{
 		{
 			name:   "a get with a query joins the base path and decodes the result",
@@ -351,12 +358,37 @@ func TestDo(t *testing.T) {
 			},
 		},
 		{
-			name:    "no retry policy retries every failure until the attempts run out",
+			name:   "no retry policy retries nothing",
+			method: "GET",
+			req: Request{
+				Path:     "/x",
+				Attempts: 3,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/x",
+					},
+					res: response{
+						status: 500,
+						body:   "one",
+					},
+				},
+			},
+			expStatus: &StatusError{
+				Code: 500,
+				Body: []byte("one"),
+			},
+		},
+		{
+			name:    "a retry policy retries every failure until the attempts run out",
 			backoff: backoff.Constant(0),
 			method:  "GET",
 			req: Request{
 				Path:     "/x",
 				Attempts: 3,
+				Retry:    retryAll,
 			},
 			wire: []exchange{
 				{
@@ -401,7 +433,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
-				Retry: func(*StatusError) bool {
+				Retry: func(error) bool {
 					return false
 				},
 			},
@@ -427,6 +459,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
+				Retry:    retryAll,
 			},
 			wire: []exchange{
 				{
@@ -460,6 +493,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
+				Retry:    retryAll,
 			},
 			wire: []exchange{
 				{
@@ -495,6 +529,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
+				Retry:    retryAll,
 			},
 			wire: []exchange{
 				{
@@ -532,6 +567,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
+				Retry:    retryAll,
 			},
 			cancelAfter: 1,
 			wire: []exchange{
@@ -550,7 +586,7 @@ func TestDo(t *testing.T) {
 			},
 		},
 		{
-			name:   "a transport failure is returned as is and not retried",
+			name:   "a transport failure is not retried without a policy",
 			method: "GET",
 			req: Request{
 				Path:     "/x",
@@ -568,6 +604,99 @@ func TestDo(t *testing.T) {
 				},
 			},
 			expErr: errBoom,
+		},
+		{
+			name:    "a transport failure is retried when the policy says so",
+			backoff: backoff.Constant(0),
+			method:  "GET",
+			req: Request{
+				Path:     "/x",
+				Attempts: 2,
+				Retry:    retryAll,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/x",
+					},
+					res: response{
+						err: errBoom,
+					},
+				},
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/x",
+					},
+					res: response{
+						status: 204,
+					},
+				},
+			},
+			exp: Response{
+				Code: 204,
+			},
+		},
+		{
+			name:    "the error holds every attempt's failure, the last one matched",
+			backoff: backoff.Constant(0),
+			method:  "GET",
+			req: Request{
+				Path:     "/x",
+				Attempts: 2,
+				Retry:    retryAll,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/x",
+					},
+					res: response{
+						err: errBoom,
+					},
+				},
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/x",
+					},
+					res: response{
+						status: 500,
+					},
+				},
+			},
+			expStatus: &StatusError{
+				Code: 500,
+			},
+			expAttempts: 2,
+		},
+		{
+			name:    "a wait the deadline would not outlive ends the call at once",
+			backoff: backoff.Constant(time.Minute),
+			method:  "GET",
+			timeout: 30 * time.Second,
+			req: Request{
+				Path:     "/x",
+				Attempts: 2,
+				Retry:    retryAll,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/x",
+					},
+					res: response{
+						status: 503,
+					},
+				},
+			},
+			expStatus: &StatusError{
+				Code: 503,
+			},
+			expAttempts: 1,
 		},
 		{
 			name:      "an error body is decoded with the client's factory",
@@ -720,6 +849,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
+				Retry:    retryAll,
 				Send:     oneShot("hello"),
 			},
 			wire: []exchange{
@@ -749,6 +879,7 @@ func TestDo(t *testing.T) {
 			req: Request{
 				Path:     "/x",
 				Attempts: 2,
+				Retry:    retryAll,
 				Send:     "hello",
 			},
 			wire: []exchange{
@@ -865,6 +996,11 @@ func TestDo(t *testing.T) {
 				rt, done := stubWire(t, test.wire)
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
+				if test.timeout > 0 {
+					var cancelTimeout context.CancelFunc
+					ctx, cancelTimeout = context.WithTimeout(ctx, test.timeout)
+					defer cancelTimeout()
+				}
 				counting := RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 					res, err := rt.RoundTrip(r)
 					n++
@@ -917,6 +1053,15 @@ func TestDo(t *testing.T) {
 						act, exp,
 					)
 				}
+				if exp := test.expAttempts; exp > 0 {
+					attempts, _ := errors.AsType[AttemptErrors](err)
+					if act := len(attempts); act != exp {
+						t.Errorf(
+							"attempt errors: %d; want %d",
+							act, exp,
+						)
+					}
+				}
 				switch {
 				case test.expStatus != nil:
 					se, ok := errors.AsType[*StatusError](err)
@@ -964,6 +1109,64 @@ func TestDo(t *testing.T) {
 					)
 				}
 			})
+		})
+	}
+}
+
+func TestAttemptErrors(t *testing.T) {
+	var (
+		errFirst = errors.New("first")
+		errLast  = errors.New("last")
+	)
+	for _, test := range []struct {
+		name   string
+		errs   AttemptErrors
+		text   string
+		unwrap error
+		isNot  error // Must not match, when set.
+	}{
+		{
+			name: "empty",
+			text: "<nil>",
+		},
+		{
+			name: "one attempt",
+			errs: AttemptErrors{
+				errLast,
+			},
+			text:   "last",
+			unwrap: errLast,
+		},
+		{
+			name: "matches only the attempt that ended the call",
+			errs: AttemptErrors{
+				errFirst,
+				errLast,
+			},
+			text:   "last",
+			unwrap: errLast,
+			isNot:  errFirst,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if act, exp := test.errs.Error(), test.text; act != exp {
+				t.Errorf(
+					"text: %q; want %q",
+					act, exp,
+				)
+			}
+			if act, exp := test.errs.Unwrap(), test.unwrap; act != exp {
+				t.Errorf(
+					"unwrap: %v; want %v",
+					act, exp,
+				)
+			}
+			if isNot := test.isNot; isNot != nil && errors.Is(test.errs, isNot) {
+				t.Errorf(
+					"errors.Is(%v, %v) is true; want false",
+					test.errs, isNot,
+				)
+			}
 		})
 	}
 }

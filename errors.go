@@ -70,10 +70,26 @@ func (e *Error) Unwrap() error {
 	return e.Details
 }
 
+// ErrResultUnknown matches a failure that leaves the result unknown: an answer
+// the docs class as "may have changed", or no answer once the request may have
+// reached the server. For an operation that changes state, the change may
+// have happened anyway; what a retry then does depends on the operation, see
+// "Retrying a change" at https://docs.spooler.sh/errors.
+//
+// It describes this call, the retries [Client.Attempts] allows included: it
+// matches if any attempt left the result unknown, whatever a later attempt
+// answered. The client retries such an attempt only when the request sets
+// RetryUnknown ([SendRequest], [AckAndSendRequest]); otherwise whether to
+// retry is the caller's decision.
+var ErrResultUnknown = errors.New("result unknown")
+
 // clientError is what every operation returns on failure: the cause, prefixed
 // with the package name, exposing through Unwrap only what is contract.
 type clientError struct {
 	err error
+
+	// resultUnknown reports whether the failure matches ErrResultUnknown.
+	resultUnknown bool
 }
 
 func (e *clientError) Error() string {
@@ -84,9 +100,22 @@ func (e *clientError) Error() string {
 }
 
 // Unwrap exposes only what is contract: the API's [Error], a request the SDK
-// refused as [ErrInvalidRequest], and the context errors by their sentinel.
-// Anything else in the chain (a *url.Error, say) stays reachable as text only.
-func (e *clientError) Unwrap() error {
+// refused as [ErrInvalidRequest], the context errors by their sentinel, and
+// [ErrResultUnknown]. Anything else in the chain (a *url.Error, say) stays
+// reachable as text only.
+func (e *clientError) Unwrap() []error {
+	var errs []error
+	if x := e.contract(); x != nil {
+		errs = append(errs, x)
+	}
+	if e.resultUnknown {
+		errs = append(errs, ErrResultUnknown)
+	}
+	return errs
+}
+
+// contract returns the contract error the cause carries, or nil.
+func (e *clientError) contract() error {
 	if x, ok := e.err.(*Error); ok {
 		return x
 	}
@@ -102,10 +131,14 @@ func (e *clientError) Unwrap() error {
 	}
 }
 
-// resultError wraps an operation's failure as a clientError; nil stays nil.
+// resultError returns an operation's failure as a clientError: one already
+// is passes through, anything else is wrapped; nil stays nil.
 func resultError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if _, ok := err.(*clientError); ok {
+		return err
 	}
 	return &clientError{
 		err: err,
@@ -271,10 +304,11 @@ var (
 	ErrRateLimited          = &KindError{Kind: ErrorKindRateLimited}
 	ErrOperationUnconfirmed = &KindError{Kind: ErrorKindOperationUnconfirmed}
 	ErrSpoolFull            = &KindError{Kind: ErrorKindSpoolFull}
-	ErrUnauthorized         = &KindError{Kind: ErrorKindUnauthorized}
-	ErrSuspended            = &KindError{Kind: ErrorKindSuspended}
-	ErrForbidden            = &KindError{Kind: ErrorKindForbidden}
-	ErrUnavailable          = &KindError{Kind: ErrorKindUnavailable}
+
+	ErrUnauthorized = &KindError{Kind: ErrorKindUnauthorized}
+	ErrSuspended    = &KindError{Kind: ErrorKindSuspended}
+	ErrForbidden    = &KindError{Kind: ErrorKindForbidden}
+	ErrUnavailable  = &KindError{Kind: ErrorKindUnavailable}
 )
 
 // UnknownHeaderError is the details of an [ErrorKindUnknownHeader] answer.

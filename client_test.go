@@ -412,6 +412,28 @@ func TestClientTrace(t *testing.T) {
 			},
 			expErr: ErrStaleToken,
 		},
+		{
+			name: "an unknown result is unknown to the hook too",
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/ack",
+						header: http.Header{
+							"Spooler-Lease": {"lease-1"},
+						},
+					},
+					res: response{
+						status: 504,
+					},
+				},
+			},
+			exp: RequestTrace{
+				Op:    OpAck,
+				Spool: "default",
+			},
+			expErr: ErrResultUnknown,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {

@@ -2,6 +2,7 @@ package spooler
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
@@ -51,6 +52,36 @@ func TestRecv(t *testing.T) {
 				},
 				Data: []byte("hello"),
 			},
+		},
+		{
+			name: "a body cut short leaves the result unknown",
+			req: RecvRequest{
+				Spool: "default",
+				Queue: "jobs",
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/queues/jobs/recv",
+						header: http.Header{
+							"Accept": {"application/octet-stream"},
+						},
+					},
+					res: response{
+						status: 200,
+						header: http.Header{
+							"Spooler-Lease":            {"lease-1"},
+							"Spooler-Lease-Expires-At": {"2026-01-02T03:04:05Z"},
+							"Spooler-Message-Id":       {"1-1"},
+							"Spooler-Message-Retries":  {"0"},
+						},
+						body:    "hel",
+						bodyErr: io.ErrUnexpectedEOF,
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
 		},
 		{
 			name: "no message became visible",

@@ -110,9 +110,12 @@ type Request struct {
 	// treated as 1, i.e. no retries.
 	Attempts int
 
-	// Retry reports whether a non-2xx response should be retried. A nil Retry
-	// retries every non-2xx response until Attempts is reached.
-	Retry func(*StatusError) bool
+	// Retry reports whether a failed attempt should be retried; err is a
+	// *StatusError or a *TransportError. A nil Retry retries nothing.
+	//
+	// However the call ends, its error after any attempt is AttemptErrors,
+	// holding every attempt's failure.
+	Retry func(err error) bool
 
 	// Error returns an error object the [Client] should try to parse
 	// accordingly to the status code. The parsed value will then set as
@@ -174,12 +177,14 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 		}
 	}
 	var (
-		statusErr  *StatusError
+		errs       AttemptErrors
 		retryAfter time.Duration
 	)
 	for attempt := range max(r.Attempts, 1) {
-		if statusErr != nil && (r.Retry != nil && !r.Retry(statusErr)) {
-			return zero, statusErr
+		if len(errs) > 0 {
+			if ctx.Err() != nil || r.Retry == nil || !r.Retry(errs.last()) {
+				return zero, errs
+			}
 		}
 		// The body is opened before any wait: one that cannot be opened
 		// again ends the retries at once, with the answer already in hand.
@@ -192,8 +197,8 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 			default:
 				reqBody, err = codecBody.Open()
 				if err != nil {
-					if statusErr != nil {
-						return zero, statusErr
+					if len(errs) > 0 {
+						return zero, errs
 					}
 					return zero, err
 				}
@@ -203,14 +208,21 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 			c.backoff.Delay(attempt),
 			retryAfter,
 		)
+		// A wait the context would not outlive ends the call at once.
+		if dl, ok := ctx.Deadline(); ok && len(errs) > 0 && time.Now().Add(backoff).After(dl) {
+			if reqBody != nil {
+				reqBody.Close()
+			}
+			return zero, errs
+		}
 		if backoff > 0 {
 			select {
 			case <-ctx.Done():
 				if reqBody != nil {
 					reqBody.Close()
 				}
-				if statusErr != nil {
-					return zero, statusErr
+				if len(errs) > 0 {
+					return zero, errs
 				}
 				return zero, ctx.Err()
 
@@ -258,7 +270,12 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 
 		res, err := c.http.Do(req)
 		if err != nil {
-			return zero, err
+			errs = append(errs, &TransportError{
+				Err:  err,
+				Sent: requestSent(err),
+			})
+			retryAfter = 0
+			continue
 		}
 		if httpSuccess(res.StatusCode) {
 			var err error
@@ -266,10 +283,18 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 				err = codec.Recv.Decode(r.Recv, res.Body)
 			}
 			res.Body.Close()
-			return Response{
+			ret := Response{
 				Code:   res.StatusCode,
 				Header: res.Header,
-			}, err
+			}
+			if err != nil {
+				errs = append(errs, &BodyError{
+					Code: res.StatusCode,
+					Err:  err,
+				})
+				return ret, errs
+			}
+			return ret, nil
 		}
 
 		// A Retry-After that does not parse is no delay: ParseRetryAfter
@@ -287,7 +312,7 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 		bts, _ := io.ReadAll(io.LimitReader(res.Body, 1<<12))
 		res.Body.Close()
 
-		statusErr = &StatusError{
+		statusErr := &StatusError{
 			Code:   res.StatusCode,
 			Header: res.Header,
 			Body:   bts,
@@ -307,11 +332,88 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 				}
 			}
 		}
+		errs = append(errs, statusErr)
 	}
-	if statusErr == nil {
-		panic("internal error: status error must not be nil here")
+	if len(errs) == 0 {
+		panic("internal error: an attempt must have failed here")
 	}
-	return zero, statusErr
+	return zero, errs
+}
+
+// AttemptErrors is the failure of a call: each attempt's failure, oldest
+// first, the last one ending the call. Each is a *StatusError, a
+// *TransportError or a *BodyError.
+type AttemptErrors []error
+
+func (e AttemptErrors) Error() string {
+	last := e.last()
+	if last == nil {
+		return "<nil>"
+	}
+	return last.Error()
+}
+
+// Unwrap returns the last failure, so that a match sees the attempt that
+// ended the call.
+func (e AttemptErrors) Unwrap() error {
+	return e.last()
+}
+
+// last returns the failure that ended the call, or nil when e is empty.
+func (e AttemptErrors) last() error {
+	if len(e) == 0 {
+		return nil
+	}
+	return e[len(e)-1]
+}
+
+// BodyError is a successful response whose body could not be read or
+// decoded.
+type BodyError struct {
+	// Code is the response's status code.
+	Code int
+
+	// Err is the failure.
+	Err error
+}
+
+func (e *BodyError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *BodyError) Unwrap() error {
+	return e.Err
+}
+
+// TransportError is a request that got no response.
+type TransportError struct {
+	// Err is the failure.
+	Err error
+
+	// Sent reports whether the request may have reached the server. It is
+	// false only when the connection itself failed: a DNS lookup or a dial.
+	Sent bool
+}
+
+func (e *TransportError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *TransportError) Unwrap() error {
+	return e.Err
+}
+
+// requestSent reports whether err leaves open that the request reached the
+// server. It errs on the side of yes: only a failed DNS lookup or dial rules
+// it out.
+func requestSent(err error) bool {
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
+		return false
+	}
+	if e, ok := errors.AsType[*net.OpError](err); ok && e.Op == "dial" {
+		return false
+	}
+	return true
 }
 
 func (c *Client) requestID() string {

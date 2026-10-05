@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 
 	"github.com/google/go-cmp/cmp"
@@ -36,10 +37,11 @@ type request struct {
 // response is what the stub answers: a status with headers and a body, or,
 // when err is set, a transport failure with no response at all.
 type response struct {
-	status int
-	header http.Header
-	body   string
-	err    error
+	status  int
+	header  http.Header
+	body    string
+	bodyErr error // Fails the body read after body, when set.
+	err     error
 }
 
 // opCase is one scenario of one operation. A request the wire does not list
@@ -279,6 +281,10 @@ func reply(r *http.Request, x response) (*http.Response, error) {
 	if header == nil {
 		header = make(http.Header)
 	}
+	var body io.Reader = strings.NewReader(x.body)
+	if x.bodyErr != nil {
+		body = io.MultiReader(body, iotest.ErrReader(x.bodyErr))
+	}
 	return &http.Response{
 		Status:     http.StatusText(x.status),
 		StatusCode: x.status,
@@ -286,7 +292,7 @@ func reply(r *http.Request, x response) (*http.Response, error) {
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Header:     header,
-		Body:       io.NopCloser(strings.NewReader(x.body)),
+		Body:       io.NopCloser(body),
 		Request:    r,
 	}, nil
 }

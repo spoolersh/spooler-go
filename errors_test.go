@@ -3,6 +3,7 @@ package spooler
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"testing"
@@ -775,6 +776,181 @@ func TestClientError(t *testing.T) {
 					act, exp,
 				)
 			}
+		})
+	}
+}
+
+// TestErrResultUnknown checks which failures match ErrResultUnknown, per
+// "Retrying a change" at https://docs.spooler.sh/errors, on an operation that
+// changes state and on one that reads alike.
+func TestErrResultUnknown(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		read bool // Run a queue read instead of an ack.
+		res  response
+		kind error // Also matched, when set.
+		exp  bool
+	}{
+		{
+			name: "operation unconfirmed",
+			res: response{
+				status: 500,
+				body:   `{"kind":"operation_unconfirmed","message":"durability unknown"}`,
+			},
+			kind: ErrOperationUnconfirmed,
+			exp:  true,
+		},
+		{
+			name: "a server failure without a kind",
+			res: response{
+				status: 500,
+			},
+			exp: true,
+		},
+		{
+			name: "a bad gateway",
+			res: response{
+				status: 502,
+			},
+			exp: true,
+		},
+		{
+			name: "a gateway timeout",
+			res: response{
+				status: 504,
+			},
+			exp: true,
+		},
+		{
+			name: "a 5xx the docs do not list is read by its class",
+			res: response{
+				status: 501,
+			},
+			exp: true,
+		},
+		{
+			name: "another unlisted 5xx",
+			res: response{
+				status: 505,
+			},
+			exp: true,
+		},
+		{
+			name: "a 507 changed nothing",
+			res: response{
+				status: 507,
+				body:   `{"kind":"spool_full","message":"the spool is full","details":{"limit":"messages"}}`,
+			},
+			kind: ErrSpoolFull,
+		},
+		{
+			name: "no response after connecting",
+			res: response{
+				err: errors.New("connection reset"),
+			},
+			exp: true,
+		},
+		{
+			name: "a failed dial",
+			res: response{
+				err: &net.OpError{
+					Op:  "dial",
+					Net: "tcp",
+					Err: errors.New("connection refused"),
+				},
+			},
+		},
+		{
+			name: "a failed lookup",
+			res: response{
+				err: &net.DNSError{
+					Err:  "no such host",
+					Name: "api.spooler.sh",
+				},
+			},
+		},
+		{
+			name: "a verdict",
+			res: response{
+				status: 410,
+				body:   `{"kind":"stale_token","message":"the lease is stale"}`,
+			},
+			kind: ErrStaleToken,
+		},
+		{
+			name: "a gateway timeout on a read",
+			read: true,
+			res: response{
+				status: 504,
+			},
+			exp: true,
+		},
+		{
+			name: "no response on a read",
+			read: true,
+			res: response{
+				err: errors.New("connection reset"),
+			},
+			exp: true,
+		},
+		{
+			name: "a failed dial on a read",
+			read: true,
+			res: response{
+				err: &net.OpError{
+					Op:  "dial",
+					Net: "tcp",
+					Err: errors.New("connection refused"),
+				},
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				c := new(Client)
+				var err error
+				if test.read {
+					done := stubWire(t, c, []exchange{
+						{
+							req: request{
+								method: "GET",
+								path:   "/v1/spools/default/queues/jobs",
+								header: http.Header{
+									"Accept": {"application/json"},
+								},
+							},
+							res: test.res,
+						},
+					})
+					_, err = c.Queue(t.Context(), QueueRequest{
+						Spool: "default",
+						Queue: "jobs",
+					})
+					done()
+				} else {
+					done := stubWire(t, c, ackWire(test.res, 1))
+					err = c.Ack(t.Context(), AckRequest{
+						Spool: "default",
+						Lease: "lease-1",
+					})
+					done()
+				}
+				if err == nil {
+					t.Fatalf("want error; got nothing")
+				}
+				if act, exp := errors.Is(err, ErrResultUnknown), test.exp; act != exp {
+					t.Errorf(
+						"errors.Is(%v, ErrResultUnknown): %t; want %t",
+						err, act, exp,
+					)
+				}
+				if kind := test.kind; kind != nil && !errors.Is(err, kind) {
+					t.Errorf(
+						"errors.Is(%v, %v) is false; want true",
+						err, kind,
+					)
+				}
+			})
 		})
 	}
 }
