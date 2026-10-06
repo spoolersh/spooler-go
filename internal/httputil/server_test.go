@@ -1,7 +1,9 @@
 package httputil
 
 import (
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -242,6 +244,82 @@ func TestServer(t *testing.T) {
 					"round trips: %d; want %d",
 					act, exp,
 				)
+			}
+		})
+	}
+}
+
+// failingReader yields data, then fails with err: a payload whose own reader
+// breaks part way.
+type failingReader struct {
+	data []byte
+	err  error
+}
+
+func (r *failingReader) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, r.err
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
+// TestServerPayloadReadFailure sends a body whose reader fails with errors a
+// connection could also give: once the server has the request, the failure
+// is the payload's, and the request counts as possibly sent.
+func TestServerPayloadReadFailure(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "a lookup error",
+			err: &net.DNSError{
+				Err:  "no such host",
+				Name: "upstream.test",
+			},
+		},
+		{
+			name: "a dial error",
+			err: &net.OpError{
+				Op:  "dial",
+				Net: "tcp",
+				Err: errors.New("connection refused"),
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer srv.Close()
+
+			c := &Client{
+				BaseURL: srv.URL,
+			}
+			_, err := c.Do(t.Context(), "POST", Request{
+				Path: "/send",
+				Send: unsizedReader{
+					Reader: &failingReader{
+						data: []byte(strings.Repeat("x", 1<<16)),
+						err:  test.err,
+					},
+				},
+				Codec: Codecs{
+					Send: StreamEncoder,
+				},
+			})
+			te, ok := errors.AsType[*TransportError](err)
+			if !ok {
+				t.Fatalf(
+					"error: %v; want *TransportError",
+					err,
+				)
+			}
+			if !te.Sent {
+				t.Errorf("sent: false; want true")
 			}
 		})
 	}

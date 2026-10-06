@@ -202,6 +202,9 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 					}
 					return zero, err
 				}
+				reqBody = bodyReader{
+					ReadCloser: reqBody,
+				}
 			}
 		}
 		backoff := max(
@@ -403,10 +406,43 @@ func (e *TransportError) Unwrap() error {
 	return e.Err
 }
 
+// bodyReader marks the request body's own read failures, so that a failure of
+// the payload, whatever its error, is never taken for one of the connection.
+type bodyReader struct {
+	io.ReadCloser
+}
+
+func (b bodyReader) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && err != io.EOF {
+		err = &bodyReadError{
+			err: err,
+		}
+	}
+	return n, err
+}
+
+// bodyReadError is a failure reading the request body.
+type bodyReadError struct {
+	err error
+}
+
+func (e *bodyReadError) Error() string {
+	return e.err.Error()
+}
+
+func (e *bodyReadError) Unwrap() error {
+	return e.err
+}
+
 // requestSent reports whether err leaves open that the request reached the
 // server. It errs on the side of yes: only a failed DNS lookup or dial rules
-// it out.
+// it out, and never one the request body's own reader returned, since the
+// body is read only once the request is under way.
 func requestSent(err error) bool {
+	if _, ok := errors.AsType[*bodyReadError](err); ok {
+		return true
+	}
 	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		return false
 	}
