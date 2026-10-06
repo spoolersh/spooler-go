@@ -13,6 +13,7 @@ import (
 const (
 	testQueueJSON = `{
 		"name": "jobs",
+		"uid": "AAAAAAAAAAEAAAAB",
 		"createdAt": "2026-01-02T03:04:05Z",
 		"state": "active",
 		"settings": {
@@ -58,6 +59,7 @@ var (
 	}
 	testQueue = Queue{
 		Name:      "jobs",
+		UID:       "AAAAAAAAAAEAAAAB",
 		CreatedAt: testCreatedAt,
 		State:     QueueStateActive,
 		Settings:  testSettings,

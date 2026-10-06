@@ -333,6 +333,9 @@ type (
 		// Name is the queue's name.
 		Name string
 
+		// UID is the queue's uid, as on [Queue].
+		UID string
+
 		// CreatedAt is when the queue was created.
 		CreatedAt time.Time
 
@@ -347,6 +350,7 @@ type (
 	}
 	queueStats struct {
 		Name      string        `json:"name"`
+		UID       string        `json:"uid"`
 		CreatedAt time.Time     `json:"createdAt"`
 		State     queueState    `json:"state"`
 		Settings  queueSettings `json:"settings"`
@@ -357,6 +361,7 @@ type (
 func (q *queueStats) toQueueStats() QueueStats {
 	return QueueStats{
 		Name:      q.Name,
+		UID:       q.UID,
 		CreatedAt: q.CreatedAt,
 		State:     QueueState(q.State),
 		Settings:  q.Settings.toQueueSettings(),
@@ -371,6 +376,11 @@ type (
 		// Name is the queue's name.
 		Name string
 
+		// UID is unique to this queue, opaque: a queue created again under
+		// the same name gets a new one. Present it as
+		// [DeleteQueueRequest.QueueUID] to delete this queue only.
+		UID string
+
 		// CreatedAt is when the queue was created.
 		CreatedAt time.Time
 
@@ -382,6 +392,7 @@ type (
 	}
 	queue struct {
 		Name      string        `json:"name"`
+		UID       string        `json:"uid"`
 		CreatedAt time.Time     `json:"createdAt"`
 		State     queueState    `json:"state"`
 		Settings  queueSettings `json:"settings"`
@@ -391,6 +402,7 @@ type (
 func (q *queue) toQueue() Queue {
 	return Queue{
 		Name:      q.Name,
+		UID:       q.UID,
 		CreatedAt: q.CreatedAt,
 		State:     QueueState(q.State),
 		Settings:  q.Settings.toQueueSettings(),

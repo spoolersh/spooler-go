@@ -481,6 +481,14 @@ type DeleteQueueRequest struct {
 	// Queue is the queue's name.
 	Queue string
 
+	// QueueUID is an optional uid of the queue to delete, as [Queue.UID]
+	// reports it. Another queue under the name is refused with
+	// [ErrQueueReplaced], and nothing is changed, so a retry cannot delete a
+	// queue created under the name since.
+	//
+	// Zero deletes whatever queue has the name.
+	QueueUID string
+
 	// Mode is how the deletion should proceed.
 	Mode QueueDeleteMode
 }
@@ -502,14 +510,18 @@ func (c *Client) DeleteQueue(ctx context.Context, req DeleteQueueRequest) error 
 			"Mode: %v", err,
 		))
 	}
+	query := url.Values{
+		"mode": []string{mode},
+	}
+	if uid := req.QueueUID; uid != "" {
+		query.Set("uid", uid)
+	}
 	rt := RequestTrace{Op: OpDeleteQueue, Spool: req.Spool, Queue: req.Queue}
 	_, err = c.do(ctx, rt, "DELETE", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
 		Path:     "/spools/" + req.Spool + "/queues/" + req.Queue,
-		Query: url.Values{
-			"mode": []string{mode},
-		},
+		Query:    query,
 	})
 	return resultError(err)
 }
