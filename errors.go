@@ -89,7 +89,7 @@ type clientError struct {
 	err error
 
 	// conds are the conditions the failure matches beyond its kind:
-	// ErrResultUnknown and the status sentinels, such as ErrUnauthorized.
+	// ErrResultUnknown and ErrUnavailable.
 	conds []error
 }
 
@@ -102,7 +102,7 @@ func (e *clientError) Error() string {
 
 // Unwrap exposes only what is contract: the API's [Error], a request the SDK
 // refused as [ErrInvalidRequest], the context errors by their sentinel, and
-// the conditions, such as [ErrResultUnknown] and [ErrUnauthorized]. Anything
+// the conditions, such as [ErrResultUnknown] and [ErrUnavailable]. Anything
 // else in the chain (a *url.Error, say) stays reachable as text only.
 func (e *clientError) Unwrap() []error {
 	var errs []error
@@ -164,9 +164,8 @@ var (
 )
 
 // ErrorKind is what an [Error] reports went wrong: the API's kinds, as
-// https://docs.spooler.sh/errors lists them, and nothing else. A condition
-// the API answers by status alone is no kind but a sentinel of its own, such
-// as [ErrUnauthorized].
+// https://docs.spooler.sh/errors lists them, and nothing else. A 503 with no
+// known kind is no kind but a sentinel of its own, [ErrUnavailable].
 type ErrorKind uint
 
 const (
@@ -208,10 +207,20 @@ const (
 	ErrorKindOperationUnconfirmed
 	// ErrorKindSpoolFull is the API's spool_full kind.
 	ErrorKindSpoolFull
+	// ErrorKindQueueReplaced is the API's queue_replaced kind.
+	ErrorKindQueueReplaced
+	// ErrorKindUnauthenticated is the API's unauthenticated kind.
+	ErrorKindUnauthenticated
+	// ErrorKindAccountSuspended is the API's account_suspended kind.
+	ErrorKindAccountSuspended
+	// ErrorKindAccountBlocked is the API's account_blocked kind.
+	ErrorKindAccountBlocked
 )
 
 var (
 	errorKind2wire = map[ErrorKind]string{
+		ErrorKindAccountBlocked:       "account_blocked",
+		ErrorKindAccountSuspended:     "account_suspended",
 		ErrorKindDedupClaimed:         "dedup_claimed",
 		ErrorKindDedupDisabled:        "dedup_disabled",
 		ErrorKindDedupInFlight:        "dedup_in_flight",
@@ -224,11 +233,13 @@ var (
 		ErrorKindQueueExists:          "queue_exists",
 		ErrorKindQueueLimit:           "queue_limit",
 		ErrorKindQueueNotFound:        "queue_not_found",
+		ErrorKindQueueReplaced:        "queue_replaced",
 		ErrorKindRateLimited:          "rate_limited",
 		ErrorKindRetentionLimit:       "retention_limit",
 		ErrorKindSpoolFull:            "spool_full",
 		ErrorKindSpoolNotFound:        "spool_not_found",
 		ErrorKindStaleToken:           "stale_token",
+		ErrorKindUnauthenticated:      "unauthenticated",
 		ErrorKindUnknownHeader:        "unknown_header",
 	}
 	errorKind2string = transform(errorKind2wire, func(s string) string {
@@ -269,6 +280,7 @@ var (
 	ErrRetentionLimit       = &KindError{Kind: ErrorKindRetentionLimit}
 	ErrQueueLimit           = &KindError{Kind: ErrorKindQueueLimit}
 	ErrQueueNotFound        = &KindError{Kind: ErrorKindQueueNotFound}
+	ErrQueueReplaced        = &KindError{Kind: ErrorKindQueueReplaced}
 	ErrSpoolNotFound        = &KindError{Kind: ErrorKindSpoolNotFound}
 	ErrQueueExists          = &KindError{Kind: ErrorKindQueueExists}
 	ErrQueueDeleting        = &KindError{Kind: ErrorKindQueueDeleting}
@@ -281,25 +293,17 @@ var (
 	ErrRateLimited          = &KindError{Kind: ErrorKindRateLimited}
 	ErrOperationUnconfirmed = &KindError{Kind: ErrorKindOperationUnconfirmed}
 	ErrSpoolFull            = &KindError{Kind: ErrorKindSpoolFull}
+	ErrUnauthenticated      = &KindError{Kind: ErrorKindUnauthenticated}
+	ErrAccountSuspended     = &KindError{Kind: ErrorKindAccountSuspended}
+	ErrAccountBlocked       = &KindError{Kind: ErrorKindAccountBlocked}
 )
 
-// The conditions the API answers by status alone, per https://docs.spooler.sh/errors.
-// They are not kinds.
-var (
-	// ErrUnauthorized matches bad credentials: an API key that is missing or
-	// not recognized.
-	ErrUnauthorized = errors.New("unauthorized")
-
-	// ErrSuspended matches a suspended account.
-	ErrSuspended = errors.New("suspended")
-
-	// ErrForbidden matches a blocked API key.
-	ErrForbidden = errors.New("forbidden")
-
-	// ErrUnavailable matches a spool momentarily unavailable.
-	// Retrying is safe.
-	ErrUnavailable = errors.New("unavailable")
-)
+// ErrUnavailable matches a spool momentarily unavailable: a 503 that names no
+// kind this SDK knows, per https://docs.spooler.sh/errors. It is no kind,
+// since a gateway in front of the API can answer it too. The attempt that
+// answered it changed nothing; an earlier attempt of the same call may have,
+// which [ErrResultUnknown] reports, so check that first.
+var ErrUnavailable = errors.New("unavailable")
 
 // UnknownHeaderError is the details of an [ErrorKindUnknownHeader] answer.
 type UnknownHeaderError struct {
@@ -343,6 +347,17 @@ type QueueNotFoundError struct {
 // Error returns the queue's name.
 func (e *QueueNotFoundError) Error() string {
 	return fmt.Sprintf("queue not found: %q", e.Queue)
+}
+
+// QueueReplacedError is the details of an [ErrorKindQueueReplaced] answer.
+type QueueReplacedError struct {
+	// UID is the uid of the queue now under the name.
+	UID string
+}
+
+// Error returns the current queue's uid.
+func (e *QueueReplacedError) Error() string {
+	return fmt.Sprintf("queue replaced: current uid %q", e.UID)
 }
 
 // DedupClaimedError is the details of an [ErrorKindDedupClaimed] answer.
@@ -441,6 +456,11 @@ func (e *errorObj) toError() *Error {
 		if err := json.Unmarshal(e.Details, &d); err == nil {
 			ret.Details = d.toError()
 		}
+	case ErrorKindQueueReplaced:
+		var d queueReplacedError
+		if err := json.Unmarshal(e.Details, &d); err == nil {
+			ret.Details = d.toError()
+		}
 	case ErrorKindDedupClaimed:
 		var d dedupClaimedError
 		if err := json.Unmarshal(e.Details, &d); err == nil {
@@ -492,6 +512,16 @@ type queueNotFoundError struct {
 func (e *queueNotFoundError) toError() *QueueNotFoundError {
 	return &QueueNotFoundError{
 		Queue: e.Queue,
+	}
+}
+
+type queueReplacedError struct {
+	UID string `json:"uid"`
+}
+
+func (e *queueReplacedError) toError() *QueueReplacedError {
+	return &QueueReplacedError{
+		UID: e.UID,
 	}
 }
 
@@ -562,25 +592,22 @@ func httpError(err error) error {
 }
 
 // statusCondition returns the sentinel of the condition the status of err's
-// last attempt signals, whatever kind the answer carried, or nil. A 411 is
-// not here: the SDK always sends a length.
+// last attempt signals when the answer names no kind this SDK knows, or nil.
+// Only a status a gateway can answer too gets one; every answer of the API
+// itself carries a kind.
 func statusCondition(err error) error {
 	se, ok := errors.AsType[*httputil.StatusError](err)
 	if !ok {
 		return nil
 	}
-	switch se.Code {
-	case http.StatusUnauthorized:
-		return ErrUnauthorized
-	case http.StatusPaymentRequired:
-		return ErrSuspended
-	case http.StatusForbidden:
-		return ErrForbidden
-	case http.StatusServiceUnavailable:
-		return ErrUnavailable
-	default:
+	if obj, ok := se.Desc.(*errorObj); ok && obj.kind() != ErrorKindUnknown {
+		// A kind this SDK knows says what the status means.
 		return nil
 	}
+	if se.Code == http.StatusServiceUnavailable {
+		return ErrUnavailable
+	}
+	return nil
 }
 
 // statusProse words an HTTP status for a message, with the wire's kind if it

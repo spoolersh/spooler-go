@@ -128,6 +128,21 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrQueueNotFound,
 		},
 		{
+			name: "queue replaced, with the current uid as a detail",
+			res: response{
+				status: 412,
+				body:   `{"kind":"queue_replaced","message":"queue jobs replaced","details":{"uid":"AAAAAAAAAAIAAAAC"}}`,
+			},
+			exp: &Error{
+				Kind:    ErrorKindQueueReplaced,
+				Message: "queue jobs replaced",
+				Details: &QueueReplacedError{
+					UID: "AAAAAAAAAAIAAAAC",
+				},
+			},
+			is: ErrQueueReplaced,
+		},
+		{
 			name: "spool not found",
 			res: response{
 				status: 404,
@@ -316,26 +331,28 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrSpoolFull,
 		},
 		{
-			name: "bad credentials have no kind and match the status sentinel",
+			name: "unauthenticated",
 			res: response{
 				status: 401,
-				body:   `{"message":"bad credentials"}`,
+				body:   `{"kind":"unauthenticated","message":"bad credentials"}`,
 			},
 			exp: &Error{
-				Message: "401 Unauthorized: bad credentials",
+				Kind:    ErrorKindUnauthenticated,
+				Message: "bad credentials",
 			},
-			is: ErrUnauthorized,
+			is: ErrUnauthenticated,
 		},
 		{
-			name: "a suspended account has no kind and matches the status sentinel",
+			name: "account suspended",
 			res: response{
 				status: 402,
-				body:   `{"message":"the account is suspended"}`,
+				body:   `{"kind":"account_suspended","message":"the account is suspended"}`,
 			},
 			exp: &Error{
-				Message: "402 Payment Required: the account is suspended",
+				Kind:    ErrorKindAccountSuspended,
+				Message: "the account is suspended",
 			},
-			is: ErrSuspended,
+			is: ErrAccountSuspended,
 		},
 		{
 			name: "an unavailable spool has no kind and matches the status sentinel, with the delay",
@@ -386,15 +403,16 @@ func TestErrorResponse(t *testing.T) {
 			},
 		},
 		{
-			name: "a blocked key has no kind and matches the status sentinel",
+			name: "account blocked",
 			res: response{
 				status: 403,
-				body:   `{"message":"the key is blocked"}`,
+				body:   `{"kind":"account_blocked","message":"the account is blocked"}`,
 			},
 			exp: &Error{
-				Message: "403 Forbidden: the key is blocked",
+				Kind:    ErrorKindAccountBlocked,
+				Message: "the account is blocked",
 			},
-			is: ErrForbidden,
+			is: ErrAccountBlocked,
 		},
 		{
 			name: "a gateway answer with no body names the status in prose",
@@ -500,6 +518,13 @@ func TestErrorResponse(t *testing.T) {
 						err, ErrStaleToken,
 					)
 				}
+				// ErrUnavailable matches only a 503 with no known kind.
+				if errors.Is(err, ErrUnavailable) && test.is != ErrUnavailable {
+					t.Errorf(
+						"errors.Is(%v, %v) is true; want false",
+						err, ErrUnavailable,
+					)
+				}
 				if test.exp.Details != nil && !errors.As(err, ptrTo(test.exp.Details)) {
 					t.Errorf(
 						"errors.As(%v, %T) is false; want true",
@@ -522,6 +547,8 @@ func ptrTo(v error) any {
 		return new(*QueueLimitError)
 	case *QueueNotFoundError:
 		return new(*QueueNotFoundError)
+	case *QueueReplacedError:
+		return new(*QueueReplacedError)
 	case *DedupClaimedError:
 		return new(*DedupClaimedError)
 	case *SpoolFullError:

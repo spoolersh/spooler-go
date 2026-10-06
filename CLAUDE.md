@@ -130,14 +130,15 @@ is not repeated here. What follows is only the SDK's side of it.
   what each carries is the docs' errors page, not this file.
 - The error never carries a status: the SDK is transport-agnostic, and a
   status is HTTP's. Kinds are the API's, one to one with the docs' table;
-  the SDK invents none. A condition the API reports by status alone is a
-  sentinel of the SDK's own (`ErrUnauthorized`, `ErrSuspended`,
-  `ErrForbidden`, `ErrUnavailable`, like `ErrResultUnknown`), derived at the
-  transport boundary and matched with `errors.Is`, never a kind. It matches
-  whatever kind the answer carries, so code matching it keeps working when
-  the server adds a kind to the status. An answer with no kind this SDK
-  knows is ErrorKindUnknown, and only there does the status appear, as prose
-  in the message, for a person to read. Callers never parse the message.
+  the SDK invents none. The one condition the API reports by status alone,
+  a 503 a gateway can answer too, is a sentinel of the SDK's own
+  (`ErrUnavailable`, like `ErrResultUnknown`), derived at the transport
+  boundary and matched with `errors.Is`, never a kind. It matches a 503 that
+  names no kind this SDK knows, so code matching it keeps working when the
+  server adds a kind this SDK version does not know yet; a known kind on a
+  503 is that kind, not the condition. An answer with no kind this SDK knows is
+  ErrorKindUnknown, and only there does the status appear, as prose in the
+  message, for a person to read. Callers never parse the message.
 - Text is for people, fields are for programs. An error prints as its kind
   followed by the server's message, which already states the facts;
   `Details` is for programmatic access only, through `errors.As`, and is

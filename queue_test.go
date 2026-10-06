@@ -565,6 +565,56 @@ func TestUpdateQueue(t *testing.T) {
 func TestDeleteQueue(t *testing.T) {
 	testOp(t, noResult((*Client).DeleteQueue), []opCase[DeleteQueueRequest, none]{
 		{
+			name: "deletes only the queue the uid names",
+			req: DeleteQueueRequest{
+				Spool:    "default",
+				Queue:    "jobs",
+				QueueUID: "AAAAAAAAAAEAAAAB",
+				Mode:     QueueDeleteModeForce,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "DELETE",
+						path:   "/v1/spools/default/queues/jobs",
+						query: url.Values{
+							"mode": {"force"},
+							"uid":  {"AAAAAAAAAAEAAAAB"},
+						},
+					},
+					res: response{
+						status: 204,
+					},
+				},
+			},
+		},
+		{
+			name: "a queue created under the name since is refused",
+			req: DeleteQueueRequest{
+				Spool:    "default",
+				Queue:    "jobs",
+				QueueUID: "AAAAAAAAAAEAAAAB",
+				Mode:     QueueDeleteModeForce,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "DELETE",
+						path:   "/v1/spools/default/queues/jobs",
+						query: url.Values{
+							"mode": {"force"},
+							"uid":  {"AAAAAAAAAAEAAAAB"},
+						},
+					},
+					res: response{
+						status: 412,
+						body:   `{"kind":"queue_replaced","message":"queue replaced","details":{"uid":"AAAAAAAAAAIAAAAC"}}`,
+					},
+				},
+			},
+			expErr: ErrQueueReplaced,
+		},
+		{
 			name: "deletes at once",
 			req: DeleteQueueRequest{
 				Spool: "default",
@@ -759,11 +809,11 @@ func TestSpoolQueues(t *testing.T) {
 					},
 					res: response{
 						status: 402,
-						body:   `{"message":"the account is suspended"}`,
+						body:   `{"kind":"account_suspended","message":"the account is suspended"}`,
 					},
 				},
 			},
-			expErr: ErrSuspended,
+			expErr: ErrAccountSuspended,
 		},
 		{
 			name:   "spool is required",
@@ -875,11 +925,11 @@ func TestSpoolStats(t *testing.T) {
 					},
 					res: response{
 						status: 401,
-						body:   `{"message":"bad credentials"}`,
+						body:   `{"kind":"unauthenticated","message":"bad credentials"}`,
 					},
 				},
 			},
-			expErr: ErrUnauthorized,
+			expErr: ErrUnauthenticated,
 		},
 		{
 			name:   "spool is required",
