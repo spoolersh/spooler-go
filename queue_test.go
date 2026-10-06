@@ -396,6 +396,30 @@ func TestCreateQueue(t *testing.T) {
 			exp: testQueue,
 		},
 		{
+			name: "a created queue without a body is a result unknown",
+			req: CreateQueueRequest{
+				Spool: "default",
+				Queue: "jobs",
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "PUT",
+						path:   "/v1/spools/default/queues/jobs",
+						header: http.Header{
+							"Accept":       {"application/json"},
+							"Content-Type": {"application/json"},
+						},
+						body: `{}`,
+					},
+					res: response{
+						status: 201,
+					},
+				},
+			},
+			expErr: ErrResultUnknown,
+		},
+		{
 			name: "an existing queue is a verdict",
 			req: CreateQueueRequest{
 				Spool: "default",
