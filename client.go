@@ -377,10 +377,12 @@ type CreateQueueRequest struct {
 	Settings QueueSettingsCreate
 }
 
-// CreateQueue creates a queue; one that already exists is [ErrQueueExists].
+// CreateQueue creates a queue and returns it as created; one that already
+// exists is [ErrQueueExists]. The returned UID names this queue even if
+// another is created under the name since.
 //
 //	// Ensure a queue "foo" exists.
-//	err := c.CreateQueue(ctx, spooler.CreateQueueRequest{
+//	_, err := c.CreateQueue(ctx, spooler.CreateQueueRequest{
 //		Spool: "default",
 //		Queue: "foo",
 //	})
@@ -390,22 +392,27 @@ type CreateQueueRequest struct {
 //	if err != nil {
 //		// Handle error.
 //	}
-func (c *Client) CreateQueue(ctx context.Context, req CreateQueueRequest) error {
+func (c *Client) CreateQueue(ctx context.Context, req CreateQueueRequest) (Queue, error) {
 	c.init()
 	if req.Spool == "" {
-		return errSpoolRequired
+		return zero[Queue](), errSpoolRequired
 	}
 	if req.Queue == "" {
-		return errQueueRequired
+		return zero[Queue](), errQueueRequired
 	}
+	var ret queue
 	rt := RequestTrace{Op: OpCreateQueue, Spool: req.Spool, Queue: req.Queue}
 	_, err := c.do(ctx, rt, "PUT", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
 		Path:     "/spools/" + req.Spool + "/queues/" + req.Queue,
 		Send:     req.Settings.wire(),
+		Recv:     &ret,
 	})
-	return resultError(err)
+	if err != nil {
+		return zero[Queue](), resultError(err)
+	}
+	return ret.toQueue(), nil
 }
 
 // QueueRequest describes a queue to read.

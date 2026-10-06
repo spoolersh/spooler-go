@@ -35,7 +35,7 @@ c := spooler.Client{
 #### Create your first queue
 
 ```go
-err := c.CreateQueue(ctx, spooler.CreateQueueRequest{
+_, err := c.CreateQueue(ctx, spooler.CreateQueueRequest{
 	Spool: "default",
 	Queue: "greetings",
 })

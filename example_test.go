@@ -21,7 +21,7 @@ func Example() {
 		APIKey:             "local",
 	}
 
-	err := c.CreateQueue(ctx, spooler.CreateQueueRequest{
+	_, err := c.CreateQueue(ctx, spooler.CreateQueueRequest{
 		Spool: "default",
 		Queue: "greetings_and_salutations",
 	})

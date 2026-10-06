@@ -305,9 +305,9 @@ func TestQueue(t *testing.T) {
 }
 
 func TestCreateQueue(t *testing.T) {
-	testOp(t, noResult((*Client).CreateQueue), []opCase[CreateQueueRequest, none]{
+	testOp(t, (*Client).CreateQueue, []opCase[CreateQueueRequest, Queue]{
 		{
-			name: "creates a queue with the server's defaults",
+			name: "creates a queue with the server's defaults and returns it",
 			req: CreateQueueRequest{
 				Spool: "default",
 				Queue: "jobs",
@@ -318,15 +318,18 @@ func TestCreateQueue(t *testing.T) {
 						method: "PUT",
 						path:   "/v1/spools/default/queues/jobs",
 						header: http.Header{
+							"Accept":       {"application/json"},
 							"Content-Type": {"application/json"},
 						},
 						body: `{}`,
 					},
 					res: response{
 						status: 201,
+						body:   testQueueJSON,
 					},
 				},
 			},
+			exp: testQueue,
 		},
 		{
 			name: "creates a queue with settings",
@@ -350,15 +353,18 @@ func TestCreateQueue(t *testing.T) {
 						method: "PUT",
 						path:   "/v1/spools/default/queues/jobs",
 						header: http.Header{
+							"Accept":       {"application/json"},
 							"Content-Type": {"application/json"},
 						},
 						body: `{"leaseTimeoutSeconds":30,"maxRetries":5,"dedupWindowSeconds":60,"retentionSeconds":3600,"recvRateLimit":{"intervalMicros":1000,"burst":10}}`,
 					},
 					res: response{
 						status: 201,
+						body:   testQueueJSON,
 					},
 				},
 			},
+			exp: testQueue,
 		},
 		{
 			name: "an explicit zero is sent, unlike an unset field",
@@ -376,15 +382,18 @@ func TestCreateQueue(t *testing.T) {
 						method: "PUT",
 						path:   "/v1/spools/default/queues/jobs",
 						header: http.Header{
+							"Accept":       {"application/json"},
 							"Content-Type": {"application/json"},
 						},
 						body: `{"leaseTimeoutSeconds":0,"maxRetries":0}`,
 					},
 					res: response{
 						status: 201,
+						body:   testQueueJSON,
 					},
 				},
 			},
+			exp: testQueue,
 		},
 		{
 			name: "an existing queue is a verdict",
@@ -398,6 +407,7 @@ func TestCreateQueue(t *testing.T) {
 						method: "PUT",
 						path:   "/v1/spools/default/queues/jobs",
 						header: http.Header{
+							"Accept":       {"application/json"},
 							"Content-Type": {"application/json"},
 						},
 						body: `{}`,

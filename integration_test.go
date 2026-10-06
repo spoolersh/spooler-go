@@ -82,7 +82,7 @@ func integrationQueue(t *testing.T, c *Client, settings QueueSettingsCreate) str
 	name := strings.TrimPrefix(t.Name(), "TestIntegration")
 	name = queueNameUnsafe.ReplaceAllString(name, "-")
 	name = strings.Trim(name, "-") + "-" + strconv.FormatUint(queueSeq.Add(1), 10)
-	err := c.CreateQueue(t.Context(), CreateQueueRequest{
+	q, err := c.CreateQueue(t.Context(), CreateQueueRequest{
 		Spool:    integrationSpool,
 		Queue:    name,
 		Settings: settings,
@@ -91,6 +91,12 @@ func integrationQueue(t *testing.T, c *Client, settings QueueSettingsCreate) str
 		t.Fatalf(
 			"create queue: %v",
 			err,
+		)
+	}
+	if q.Name != name || q.UID == "" {
+		t.Fatalf(
+			"created queue: %+v; want name %q and a uid",
+			q, name,
 		)
 	}
 	t.Cleanup(func() {
@@ -862,7 +868,7 @@ func TestIntegrationQueues(t *testing.T) {
 		)
 	}
 
-	err = c.CreateQueue(t.Context(), CreateQueueRequest{
+	_, err = c.CreateQueue(t.Context(), CreateQueueRequest{
 		Spool: integrationSpool,
 		Queue: queue,
 	})
