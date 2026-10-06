@@ -381,7 +381,7 @@ type BodyError struct {
 }
 
 func (e *BodyError) Error() string {
-	return e.Err.Error()
+	return "response body: " + e.Err.Error()
 }
 
 func (e *BodyError) Unwrap() error {

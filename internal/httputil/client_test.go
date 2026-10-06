@@ -1170,3 +1170,43 @@ func TestAttemptErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestBodyError(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  *BodyError
+		text string
+	}{
+		{
+			name: "an empty body",
+			err: &BodyError{
+				Code: 201,
+				Err:  io.EOF,
+			},
+			text: "response body: EOF",
+		},
+		{
+			name: "a truncated body",
+			err: &BodyError{
+				Code: 200,
+				Err:  io.ErrUnexpectedEOF,
+			},
+			text: "response body: unexpected EOF",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if act, exp := test.err.Error(), test.text; act != exp {
+				t.Errorf(
+					"text: %q; want %q",
+					act, exp,
+				)
+			}
+			if act, exp := errors.Unwrap(test.err), test.err.Err; act != exp {
+				t.Errorf(
+					"unwrap: %v; want %v",
+					act, exp,
+				)
+			}
+		})
+	}
+}
