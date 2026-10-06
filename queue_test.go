@@ -465,6 +465,37 @@ func TestUpdateQueue(t *testing.T) {
 			},
 		},
 		{
+			name: "a uid restricts the update to its queue",
+			req: UpdateQueueRequest{
+				Spool:    "default",
+				Queue:    "jobs",
+				QueueUID: "AAAAAAAAAAEAAAAB",
+				Settings: QueueSettingsUpdate{
+					MaxRetries: new(9),
+				},
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "PATCH",
+						path:   "/v1/spools/default/queues/jobs",
+						query: url.Values{
+							"uid": {"AAAAAAAAAAEAAAAB"},
+						},
+						header: http.Header{
+							"Content-Type": {"application/json"},
+						},
+						body: `{"maxRetries":9}`,
+					},
+					res: response{
+						status: 412,
+						body:   `{"kind":"queue_replaced","message":"queue jobs was replaced","details":{"uid":"AAAAAAAAAAIAAAAC"}}`,
+					},
+				},
+			},
+			expErr: ErrQueueReplaced,
+		},
+		{
 			name: "a lost race is retried",
 			req: UpdateQueueRequest{
 				Spool: "default",
