@@ -168,6 +168,20 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrQueueExists,
 		},
 		{
+			name: "queue creating",
+			res: response{
+				status: 409,
+				body:   `{"kind":"queue_creating","message":"queue jobs is being created"}`,
+			},
+			attempts: 2,
+			times:    2,
+			exp: &Error{
+				Kind:    ErrorKindQueueCreating,
+				Message: "queue jobs is being created",
+			},
+			is: ErrQueueCreating,
+		},
+		{
 			name: "queue deleting",
 			res: response{
 				status: 409,

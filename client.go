@@ -1408,7 +1408,11 @@ func retry(err error) bool {
 	if !ok {
 		return false
 	}
-	if errorKindOf(e) == ErrorKindQueueBusy {
+	switch errorKindOf(e) {
+	case
+		ErrorKindQueueBusy,
+		ErrorKindQueueCreating:
+
 		return true
 	}
 	switch e.Code {

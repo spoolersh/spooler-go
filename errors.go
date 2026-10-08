@@ -187,6 +187,8 @@ const (
 	ErrorKindSpoolNotFound
 	// ErrorKindQueueExists is the API's queue_exists kind.
 	ErrorKindQueueExists
+	// ErrorKindQueueCreating is the API's queue_creating kind.
+	ErrorKindQueueCreating
 	// ErrorKindQueueDeleting is the API's queue_deleting kind.
 	ErrorKindQueueDeleting
 	// ErrorKindQueueBusy is the API's queue_busy kind.
@@ -229,6 +231,7 @@ var (
 		ErrorKindOperationUnconfirmed: "operation_unconfirmed",
 		ErrorKindPayloadTooLarge:      "payload_too_large",
 		ErrorKindQueueBusy:            "queue_busy",
+		ErrorKindQueueCreating:        "queue_creating",
 		ErrorKindQueueDeleting:        "queue_deleting",
 		ErrorKindQueueExists:          "queue_exists",
 		ErrorKindQueueLimit:           "queue_limit",
@@ -283,6 +286,7 @@ var (
 	ErrQueueReplaced        = &KindError{Kind: ErrorKindQueueReplaced}
 	ErrSpoolNotFound        = &KindError{Kind: ErrorKindSpoolNotFound}
 	ErrQueueExists          = &KindError{Kind: ErrorKindQueueExists}
+	ErrQueueCreating        = &KindError{Kind: ErrorKindQueueCreating}
 	ErrQueueDeleting        = &KindError{Kind: ErrorKindQueueDeleting}
 	ErrQueueBusy            = &KindError{Kind: ErrorKindQueueBusy}
 	ErrNotFailed            = &KindError{Kind: ErrorKindNotFailed}
