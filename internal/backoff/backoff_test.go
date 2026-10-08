@@ -3,6 +3,7 @@ package backoff
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"testing"
 	"testing/synctest"
@@ -145,6 +146,22 @@ func TestExponentialDelay(t *testing.T) {
 			i:   1,
 			exp: 100 * time.Millisecond, // clamped down from 500ms
 		},
+		{
+			name: "limit caps an attempt past int64 range",
+			e: Exponential{
+				Base:   time.Second,
+				Factor: 1.5,
+				Limit:  time.Minute,
+			},
+			i:   58,
+			exp: time.Minute, // unclamped: 1s * 1.5^57 ~ 1.1e19ns, past int64
+		},
+		{
+			name: "no limit caps an attempt past int64 range",
+			e:    Exponential{},
+			i:    1000,
+			exp:  math.MaxInt64,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			act := test.e.Delay(test.i)
@@ -172,6 +189,40 @@ func TestExponentialJitterInRange(t *testing.T) {
 		if act < minD || act > maxD {
 			t.Errorf("delay %v outside [%v, %v]", act, minD, maxD)
 		}
+	}
+}
+
+func TestExponentialJitterPastRange(t *testing.T) {
+	// Past int64 range the unjittered delay is +Inf: negative jitter must
+	// not turn it into NaN.
+	for _, test := range []struct {
+		name  string
+		limit time.Duration
+		exp   time.Duration
+	}{
+		{
+			name:  "limit",
+			limit: 5 * time.Second,
+			exp:   5 * time.Second,
+		},
+		{
+			name: "no limit",
+			exp:  math.MaxInt64,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := Exponential{
+				Base:   time.Second,
+				Factor: 1.5,
+				Jitter: 0.5,
+				Limit:  test.limit,
+			}
+			for range 1000 {
+				if act, exp := e.Delay(2000), test.exp; act != exp {
+					t.Fatalf("delay: %v; want %v", act, exp)
+				}
+			}
+		})
 	}
 }
 

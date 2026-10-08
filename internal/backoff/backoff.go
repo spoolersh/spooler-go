@@ -47,14 +47,20 @@ func (e *Exponential) Delay(i int) time.Duration {
 	limit := cmp.Or(max(0, e.Limit), math.MaxInt64)
 	f := cmp.Or(max(0, e.Factor), DefaultExponentialFactor)
 	x := float64(base) * math.Pow(f, float64(i-1))
+	// Clamped before jitter too: past int64 range x may be +Inf, and +Inf
+	// plus negative jitter is NaN.
+	if x >= float64(limit) {
+		return limit
+	}
 	if j := e.Jitter; 0 < j && j < 1 {
 		x += x * j * 2 * (rand.Float64() - 0.5)
 	}
-	d := time.Duration(x)
-	if d > limit {
+	// Compared as float: converting a value past int64 range is
+	// platform-dependent (amd64 yields a negative duration).
+	if x >= float64(limit) {
 		return limit
 	}
-	return d
+	return time.Duration(x)
 }
 
 type StopError struct {
