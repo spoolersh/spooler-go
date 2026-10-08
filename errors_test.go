@@ -37,11 +37,12 @@ func ackWire(res response, times int) []exchange {
 // operation and checks what the caller can match, read and print.
 func TestErrorResponse(t *testing.T) {
 	for _, test := range []struct {
-		name  string
-		res   response
-		times int    // Answers before the SDK gives up; 1 unless transient.
-		exp   *Error // What errors.As yields.
-		is    error  // The sentinel errors.Is must match, if any.
+		name     string
+		res      response
+		times    int    // Answers before the SDK gives up; 1 unless transient.
+		attempts int    // The client's Attempts; zero is the default.
+		exp      *Error // What errors.As yields.
+		is       error  // The sentinel errors.Is must match, if any.
 	}{
 		{
 			name: "invalid token",
@@ -184,7 +185,8 @@ func TestErrorResponse(t *testing.T) {
 				status: 409,
 				body:   `{"kind":"queue_busy","message":"a concurrent change won"}`,
 			},
-			times: 2,
+			attempts: 2,
+			times:    2,
 			exp: &Error{
 				Kind:    ErrorKindQueueBusy,
 				Message: "a concurrent change won",
@@ -263,7 +265,8 @@ func TestErrorResponse(t *testing.T) {
 				},
 				body: `{"kind":"rate_limited","message":"slow down"}`,
 			},
-			times: 2,
+			attempts: 2,
+			times:    2,
 			exp: &Error{
 				Kind:       ErrorKindRateLimited,
 				Message:    "slow down",
@@ -363,7 +366,8 @@ func TestErrorResponse(t *testing.T) {
 				},
 				body: `{"message":"the spool is momentarily unavailable"}`,
 			},
-			times: 2,
+			attempts: 2,
+			times:    2,
 			exp: &Error{
 				Message:    "503 Service Unavailable: the spool is momentarily unavailable",
 				RetryAfter: 5 * time.Second,
@@ -376,7 +380,8 @@ func TestErrorResponse(t *testing.T) {
 				status: 503,
 				body:   `{"kind":"maintenance","message":"back in five"}`,
 			},
-			times: 2,
+			attempts: 2,
+			times:    2,
 			exp: &Error{
 				Message: "503 Service Unavailable (kind maintenance): back in five",
 			},
@@ -464,7 +469,8 @@ func TestErrorResponse(t *testing.T) {
 				},
 				body: `{"kind":"rate_limited","message":"slow down"}`,
 			},
-			times: 2,
+			attempts: 2,
+			times:    2,
 			exp: &Error{
 				Kind:    ErrorKindRateLimited,
 				Message: "slow down",
@@ -474,7 +480,9 @@ func TestErrorResponse(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				c := new(Client)
+				c := &Client{
+					Attempts: test.attempts,
+				}
 				done := stubWire(t, c, ackWire(test.res, max(test.times, 1)))
 				err := c.Ack(t.Context(), AckRequest{
 					Spool: "default",

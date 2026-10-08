@@ -122,7 +122,7 @@ A request the client refuses before sending, such as one missing a required fiel
 
 ### Retries
 
-The client retries transient errors on its own, waiting out a `Retry-After` when the server sends one, but only failures that changed nothing. `Client.Attempts` sets how many tries an operation gets; the default is two. Put a deadline on the context to cap the wait. An application with a retry policy of its own can set `Attempts: 1`.
+The client retries transient errors on its own, waiting out a `Retry-After` when the server sends one, but only failures that changed nothing. `Client.Attempts` sets how many tries an operation gets; the default is five. Put a deadline on the context to cap the wait. An application with a retry policy of its own can set `Attempts: 1`.
 
 When an operation may have changed state anyway (a `5xx` other than `503` and `507`, or no answer once the request may have reached the server) the error matches `spooler.ErrResultUnknown`. The client retries such a result only when the request sets `RetryUnknown`: for a send, accepting that the message may be appended twice, as a new message with its own id; an ack-and-send retried that way never appends twice. What a retry does is on [docs.spooler.sh/errors](https://docs.spooler.sh/errors#retrying-a-change).
 

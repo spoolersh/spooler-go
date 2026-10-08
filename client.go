@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spoolersh/spooler-go/internal/backoff"
 	"github.com/spoolersh/spooler-go/internal/httputil"
 )
 
@@ -22,8 +23,8 @@ import (
 const DefaultHost = "api.spooler.sh"
 
 // DefaultAttempts is how many times an operation is tried when
-// [Client.Attempts] is zero: the first request and one retry.
-const DefaultAttempts = 2
+// [Client.Attempts] is zero: the first request and four retries.
+const DefaultAttempts = 5
 
 const (
 	headerAuthorization  = "Authorization"
@@ -130,6 +131,14 @@ func (c *Client) init() {
 			ClientBuilder: b,
 			UserAgent:     "spooler-go/" + Version,
 			BaseURL:       u.String(),
+			// With DefaultAttempts the retries wait about 150ms, 450ms,
+			// 1.35s and 4.05s, each ±25%: about 6s in all, 4.5s to 7.5s.
+			Backoff: &backoff.Exponential{
+				Base:   150 * time.Millisecond,
+				Factor: 3,
+				Jitter: 0.25,
+				Limit:  5 * time.Second,
+			},
 			Codec: httputil.Codecs{
 				Send:  httputil.JSONEncoder,
 				Recv:  httputil.JSONDecoder,
