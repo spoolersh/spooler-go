@@ -93,6 +93,7 @@ func (m *messageStats) toMessageStats() MessageStats {
 
 type (
 	// RateLimit is a token bucket rate limit.
+	//
 	// Zero means no limit.
 	RateLimit struct {
 		// IntervalMicros is the refill interval in microseconds.
@@ -126,14 +127,17 @@ type (
 	// QueueSettings is a queue's settings as applied, every field present.
 	QueueSettings struct {
 		// LeaseTimeoutSeconds is the lease timeout in seconds.
+		//
 		// Zero means leases never expire.
 		LeaseTimeoutSeconds int
 
 		// MaxRetries is the redeliveries a message gets before it is failed.
+		//
 		// Zero means none.
 		MaxRetries int
 
 		// DedupWindowSeconds is the dedup window in seconds.
+		//
 		// Zero means dedup is off.
 		DedupWindowSeconds int
 
@@ -144,6 +148,7 @@ type (
 		EffectiveRetentionSeconds int
 
 		// RecvRateLimit is the rate limit on receives.
+		//
 		// Zero means no limit.
 		RecvRateLimit RateLimit
 	}
@@ -174,24 +179,29 @@ type (
 	QueueSettingsCreate struct {
 		// LeaseTimeoutSeconds is the lease timeout in seconds; a value of 0
 		// disables it.
+		//
 		// Zero means the server's default.
 		LeaseTimeoutSeconds *int
 
 		// MaxRetries is the redeliveries a message gets before it is failed;
 		// a value of 0 means none.
+		//
 		// Zero means the server's default.
 		MaxRetries *int
 
 		// DedupWindowSeconds is the dedup window in seconds; a value of 0
 		// disables dedup.
+		//
 		// Zero means the server's default.
 		DedupWindowSeconds *int
 
 		// RetentionSeconds is the retention in seconds.
+		//
 		// Zero means the server's default.
 		RetentionSeconds *int
 
 		// RecvRateLimit is the rate limit on receives.
+		//
 		// Zero means no limit.
 		RecvRateLimit *RateLimit
 	}
@@ -201,25 +211,30 @@ type (
 	QueueSettingsUpdate struct {
 		// LeaseTimeoutSeconds is the lease timeout in seconds; a value of 0
 		// disables it.
+		//
 		// Zero keeps the current value.
 		LeaseTimeoutSeconds *int
 
 		// MaxRetries is the redeliveries a message gets before it is failed;
 		// a value of 0 means none.
+		//
 		// Zero keeps the current value.
 		MaxRetries *int
 
 		// DedupWindowSeconds is the dedup window in seconds; a value of 0
 		// disables dedup.
+		//
 		// Zero keeps the current value.
 		DedupWindowSeconds *int
 
 		// RetentionSeconds is the retention in seconds.
+		//
 		// Zero keeps the current value.
 		RetentionSeconds *int
 
 		// RecvRateLimit is the rate limit on receives; a pointer to the zero
 		// RateLimit removes it.
+		//
 		// Zero keeps the current value.
 		RecvRateLimit *RateLimit
 	}
@@ -531,18 +546,22 @@ type (
 		CreatedAt time.Time
 
 		// VisibleAt is when a delayed message becomes visible.
+		//
 		// Zero means the message is not delayed.
 		VisibleAt time.Time
 
 		// LeaseExpiresAt is when the current lease expires.
+		//
 		// Zero means no lease, or one that never expires.
 		LeaseExpiresAt time.Time
 
 		// ExpiresAt is when retention discards the message.
+		//
 		// Zero means retention is off.
 		ExpiresAt time.Time
 
 		// Handle is the message's handle.
+		//
 		// Zero means the listing did not ask for one with ReturnHandle.
 		Handle Handle
 	}

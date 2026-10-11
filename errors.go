@@ -30,11 +30,13 @@ type Error struct {
 
 	// Details is the facts the message states, as a type fixed per kind,
 	// such as [QueueNotFoundError]; reach it with [errors.As].
+	//
 	// Zero means the kind has no details.
 	Details error
 
 	// RetryAfter is how long the server asked to wait before retrying, as
 	// of the last answer.
+	//
 	// Zero means the server did not say.
 	RetryAfter time.Duration
 }

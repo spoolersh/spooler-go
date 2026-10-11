@@ -265,10 +265,10 @@ addition:
   delay until the message becomes visible", "Writer is an optional
   destination for the payload". A required field says what it names and
   nothing about being required; the request is refused without it.
-- A field's zero value is documented as the last line of its comment, on a
-  line of its own, as a sentence starting with "Zero": "Zero means the
-  server's default.", "Zero keeps every queue.", "Zero sends an empty
-  message." The word is always "zero", never "nil", "empty" or "absent",
+- A field's zero value is documented as the last line of its comment, as its
+  own paragraph after a blank comment line, in a sentence starting with
+  "Zero": "Zero means the server's default.", "Zero keeps every queue.",
+  "Zero sends an empty message." The word is always "zero", never "nil", "empty" or "absent",
   whatever the type. Where a pointer field's pointed-to 0 means something
   else, that is said in the body as "a value of 0".
 - In a struct declaration, a field that carries a doc comment is separated

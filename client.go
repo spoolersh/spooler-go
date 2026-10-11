@@ -55,6 +55,7 @@ type Client struct {
 	Trace ClientTrace
 
 	// Host specifies the API host, as "host" or "host:port".
+	//
 	// Zero means [DefaultHost].
 	Host string
 
@@ -193,20 +194,24 @@ type SpoolStatsRequest struct {
 	Spool string
 
 	// Queues is an optional filter keeping only these queues on the page.
+	//
 	// Zero filters nothing.
 	Queues []string
 
 	// Match is an optional filter keeping on the page only the queues whose
 	// names the expression matches, unanchored.
+	//
 	// Zero filters nothing.
 	Match *regexp.Regexp
 
 	// Limit is an optional cap on the number of queues on the page.
+	//
 	// Zero means the server's default.
 	Limit int
 
 	// After is an optional cursor resuming the page from the previous page's
 	// Next.
+	//
 	// Zero starts from the first page.
 	After string
 }
@@ -253,15 +258,18 @@ type SpoolQueuesRequest struct {
 
 	// Match is an optional filter keeping on the page only the queues whose
 	// names the expression matches, unanchored.
+	//
 	// Zero filters nothing.
 	Match *regexp.Regexp
 
 	// Limit is an optional cap on the queues on the page.
+	//
 	// Zero means the server's default.
 	Limit int
 
 	// After is an optional cursor resuming the page from the previous page's
 	// Next.
+	//
 	// Zero starts from the first page.
 	After string
 }
@@ -304,20 +312,23 @@ type QueueMessagesRequest struct {
 	// Spool is the spool the queue is in.
 	Spool string
 
-	// Queue is the queue to list.
+	// Queue is the queue to list messages in.
 	Queue string
 
 	// State is an optional filter keeping only messages in this state on
 	// the page.
+	//
 	// Zero keeps messages of every state on the page.
 	State MessageState
 
 	// Limit is an optional cap on the messages on the page.
+	//
 	// Zero means the server's default.
 	Limit int
 
 	// After is an optional cursor resuming the page just past this message
 	// id, from the previous page's Next.
+	//
 	// Zero starts from the first page.
 	After string
 
@@ -382,6 +393,7 @@ type CreateQueueRequest struct {
 	Queue string
 
 	// Settings are optional settings to apply.
+	//
 	// Zero means the server's defaults.
 	Settings QueueSettingsCreate
 }
@@ -640,6 +652,7 @@ type SendRequest struct {
 	Queue string
 
 	// DelaySeconds is an optional delay until the message becomes visible.
+	//
 	// Zero means visible at once.
 	DelaySeconds int
 
@@ -647,6 +660,7 @@ type SendRequest struct {
 	Dedup Dedup
 
 	// Data is an optional payload.
+	//
 	// Zero sends an empty message.
 	Data []byte
 
@@ -775,6 +789,7 @@ type AckAndSendRequest struct {
 
 	// DelaySeconds is an optional delay until the new message becomes
 	// visible.
+	//
 	// Zero means visible at once.
 	DelaySeconds int
 
@@ -782,6 +797,7 @@ type AckAndSendRequest struct {
 	Dedup Dedup
 
 	// Data is the new message's optional payload.
+	//
 	// Zero sends an empty message.
 	Data []byte
 
@@ -902,6 +918,7 @@ type RecvRequest struct {
 	WaitSeconds *int
 
 	// Writer is an optional destination for the payload.
+	//
 	// Zero buffers the payload and returns it in RecvResult.Data instead.
 	Writer io.Writer
 }
@@ -932,6 +949,7 @@ type RecvResult struct {
 // LeaseMeta is what a receive or a renew reports about a lease.
 type LeaseMeta struct {
 	// ExpiresAt is when the lease expires.
+	//
 	// Zero means the lease never expires.
 	ExpiresAt time.Time
 }
@@ -1166,6 +1184,7 @@ type ReleaseRequest struct {
 
 	// DelaySeconds is an optional delay until the message becomes visible
 	// again.
+	//
 	// Zero means visible at once.
 	DelaySeconds int
 }
@@ -1277,6 +1296,7 @@ type InspectRequest struct {
 	Handle Handle
 
 	// Writer is an optional destination for the payload.
+	//
 	// Zero buffers the payload and returns it in InspectResult.Data instead.
 	Writer io.Writer
 }
@@ -1360,6 +1380,7 @@ type RecoverRequest struct {
 
 	// DelaySeconds is an optional delay until the recovered message becomes
 	// visible.
+	//
 	// Zero means visible at once.
 	DelaySeconds int
 }
