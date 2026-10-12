@@ -72,7 +72,7 @@ is not repeated here. What follows is only the SDK's side of it.
   makes it safe: for a send, a possible second message with its own id; for
   an ack-and-send, nothing appended twice. The SDK never claims a retry is
   safe on timing it cannot check (a dedup window, a deadline); the designs
-  that did were dropped, see TODO.md. A call's error carries every attempt's
+  that did were dropped. A call's error carries every attempt's
   failure (`httputil.AttemptErrors`) and matches `ErrResultUnknown` if any
   attempt left the result unknown: no later failure settles that, only a
   success does.
@@ -91,17 +91,24 @@ is not repeated here. What follows is only the SDK's side of it.
   Anything that spans requests, such as a consumer that blocks until a
   message arrives or a walk over every page, is a top-level function over a
   `*Client` returning an `iter.Seq2[T, error]`, built only from the
-  methods, ending when the context ends, and yielding an error as its last
-  element rather than swallowing it. The methods are `net.Conn.Read`, the
+  methods, yielding an error as its last element rather than swallowing it.
+  The methods are `net.Conn.Read`, the
   functions are `io.ReadFull`: a caller who wants the loop gets it, one who
   wants the bound keeps it, and a hook still fires per request.
+- The context governs I/O, nothing else. It bounds every request the SDK
+  makes and is checked only there: a walker whose context is cancelled
+  fails on its next request, not between the items of a page it already
+  holds. Those items are in-process data the SDK hands over as they are, the
+  way `bufio.Scanner` drains its buffer; a caller who wants to stop sooner
+  checks the context in its own loop. The SDK never polls `ctx.Done()`
+  around work that does no I/O.
 - The two kinds of token are distinct Go types, `Lease` and `Handle`, so
   presenting one where the other goes does not compile.
 - Input is a <Op>Request struct whenever there is more than one argument
   after the context. Since every operation names a spool, that is every
   operation.
-- A read returns the schema it names. Queue returns Queue, SpoolStats returns
-  SpoolStats with its own Next. Do not wrap a resource merely to give it an
+- A read returns the schema it names. Queue returns Queue, Spool returns
+  Spool. Do not wrap a resource merely to give it an
   operation-specific name.
 - A <Op>Result groups a composite answer: a body plus a header, or a
   resource plus a credential. Send, Recv, Renew, AckAndSend.
@@ -249,8 +256,9 @@ addition:
   have to translate.
 - A request type's doc is "<Name>Request describes <what to act on and
   how>": "SendRequest describes a message to append to a queue",
-  "AckRequest describes a delivery to ack", "SpoolQueuesRequest describes
-  a page of a spool's queues to list". Always "describes": a request does
+  "AckRequest describes a delivery to ack", "QueuesRequest describes a
+  spool's queues to list, and their pagination". Always "describes": a
+  request does
   nothing itself, so no verb of the operation ("selects", "names", "acks")
   is its verb. It never restates what the operation does, which is the
   method's doc, and never calls the request the thing it carries ("is a
