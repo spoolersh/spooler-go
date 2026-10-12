@@ -166,11 +166,11 @@ func TestSend(t *testing.T) {
 			},
 		},
 		{
-			name: "sends the declared length of a reader",
+			name: "sends a reader to its end, without a length",
 			req: SendRequest{
 				Spool:      "default",
 				Queue:      "jobs",
-				DataSource: DataSourceReader(strings.NewReader("hello world"), 5),
+				DataSource: DataSourceReader(strings.NewReader("hello world")),
 			},
 			wire: []exchange{
 				{
@@ -180,7 +180,8 @@ func TestSend(t *testing.T) {
 						header: http.Header{
 							"Content-Type": {"application/octet-stream"},
 						},
-						body: "hello",
+						body:    "hello world",
+						unsized: true,
 					},
 					res: response{
 						status: 201,
@@ -443,7 +444,7 @@ func TestSend(t *testing.T) {
 			req: SendRequest{
 				Spool:      "default",
 				Queue:      "jobs",
-				DataSource: DataSourceReader(strings.NewReader("hello"), 5),
+				DataSource: DataSourceReader(strings.NewReader("hello")),
 			},
 			wire: []exchange{
 				{
@@ -453,7 +454,8 @@ func TestSend(t *testing.T) {
 						header: http.Header{
 							"Content-Type": {"application/octet-stream"},
 						},
-						body: "hello",
+						body:    "hello",
+						unsized: true,
 					},
 					res: response{
 						status: 503,
@@ -600,7 +602,7 @@ func TestSend(t *testing.T) {
 			req: SendRequest{
 				Spool:        "default",
 				Queue:        "jobs",
-				DataSource:   DataSourceReader(strings.NewReader("hello"), 5),
+				DataSource:   DataSourceReader(strings.NewReader("hello")),
 				RetryUnknown: true,
 			},
 			wire: []exchange{
@@ -611,7 +613,8 @@ func TestSend(t *testing.T) {
 						header: http.Header{
 							"Content-Type": {"application/octet-stream"},
 						},
-						body: "hello",
+						body:    "hello",
+						unsized: true,
 					},
 					res: response{
 						status: 504,

@@ -204,7 +204,7 @@ func TestIntegrationSendRecvAck(t *testing.T) {
 		{
 			name: "a reader",
 			req: SendRequest{
-				DataSource: DataSourceReader(strings.NewReader("hello world"), 5),
+				DataSource: DataSourceReader(strings.NewReader("hello")),
 			},
 			exp: []byte("hello"),
 		},

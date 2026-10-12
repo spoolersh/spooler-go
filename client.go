@@ -565,13 +565,10 @@ type (
 	readSeeker struct {
 		io.ReadSeeker
 	}
-	readSizer struct {
+	reader struct {
 		io.Reader
-		size int64
 	}
 )
-
-func (r readSizer) Size() int64 { return r.size }
 
 // DataSource is a streamed payload for a send, from [DataSourceReader] or
 // [DataSourceReadSeeker]. The zero value is no source.
@@ -584,21 +581,22 @@ func (d DataSource) IsZero() bool {
 	return d.r == nil
 }
 
-// DataSourceReader sends the first n bytes of r. The reader is read once, so a
-// send that fails with an answer that may be retried is not retried.
-// Use [DataSourceReadSeeker] for a source that can be sent again.
-func DataSourceReader(r io.Reader, n int64) DataSource {
+// DataSourceReader sends r to its end, streamed without a length. The reader
+// is read once, so a send that fails with an answer that may be retried is not
+// retried. Use [DataSourceReadSeeker] for a source that can be sent again.
+//
+// Only Read is called on r, even if r implements other interfaces.
+func DataSourceReader(r io.Reader) DataSource {
 	return DataSource{
-		r: readSizer{
-			Reader: r,
-			size:   n,
-		},
+		r: reader{r},
 	}
 }
 
 // DataSourceReadSeeker sends rs from its current offset to its end, and
 // rewinds it to send again when a retry is due. To send part of a seekable
 // source, pass an [io.SectionReader].
+//
+// Only Read and Seek are called on r, even if rs implements other interfaces.
 func DataSourceReadSeeker(rs io.ReadSeeker) DataSource {
 	return DataSource{
 		r: readSeeker{rs},

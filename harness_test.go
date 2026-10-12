@@ -32,6 +32,8 @@ type request struct {
 	query  url.Values
 	header http.Header
 	body   string
+	// unsized expects the body sent without a length, as a plain reader is.
+	unsized bool
 }
 
 // response is what the stub answers: a status with headers and a body, or,
@@ -264,8 +266,12 @@ func assertRequest(t *testing.T, n int, r *http.Request, x request) {
 			n, act, exp,
 		)
 	}
-	// The API refuses a request without a length, so it must always be known.
-	if act, exp := r.ContentLength, int64(len(x.body)); act != exp {
+	// A sized body carries its length; a plain reader's is unknown, -1.
+	exp := int64(len(x.body))
+	if x.unsized {
+		exp = -1
+	}
+	if act := r.ContentLength; act != exp {
 		t.Errorf(
 			"request %d: content length: %d; want %d",
 			n, act, exp,

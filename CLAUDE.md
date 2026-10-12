@@ -153,8 +153,9 @@ is not repeated here. What follows is only the SDK's side of it.
   both forms: never make a caller parse text for what could be a field, and
   never repeat in text what a field next to it already says.
 - Data-related operations support both []byte and streaming versions.
-- Payloads are []byte or an io.Reader with a known length; the SDK neither
-  encodes nor frames them.
+- Payloads are []byte or an io.Reader; the SDK neither encodes nor frames
+  them. A seekable reader is sent with its length and can be sent again; a
+  plain one is streamed and read once.
 - Encryption and compression are not client features, decided 2026-09-22.
   Both are client-side only: the server stores opaque bytes and carries no
   per-message metadata, so a consumer can tell a sealed or compressed
