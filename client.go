@@ -187,73 +187,36 @@ func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req htt
 	return res, err
 }
 
-// SpoolStatsRequest describes a spool to read, and the pagination of its
-// queues.
-type SpoolStatsRequest struct {
-	// Spool is the spool to read.
+// SpoolRequest describes a spool to read.
+type SpoolRequest struct {
+	// Spool is the name of the spool to read.
 	Spool string
-
-	// Queues is an optional filter keeping only these queues on the page.
-	//
-	// Zero filters nothing.
-	Queues []string
-
-	// Match is an optional filter keeping on the page only the queues whose
-	// names the expression matches, unanchored.
-	//
-	// Zero filters nothing.
-	Match *regexp.Regexp
-
-	// Limit is an optional cap on the number of queues on the page.
-	//
-	// Zero means the server's default.
-	Limit int
-
-	// After is an optional cursor resuming the page from the previous page's
-	// Next.
-	//
-	// Zero starts from the first page.
-	After string
 }
 
-// SpoolStats reads a spool's message counts and one page of its queues with
-// theirs.
-func (c *Client) SpoolStats(ctx context.Context, req SpoolStatsRequest) (SpoolStats, error) {
+// Spool reads a spool: its queue count and its message counts summed across
+// every queue.
+func (c *Client) Spool(ctx context.Context, req SpoolRequest) (Spool, error) {
 	c.init()
 	if req.Spool == "" {
-		return zero[SpoolStats](), errSpoolRequired
+		return zero[Spool](), errSpoolRequired
 	}
-	var query url.Values
-	if len(req.Queues) > 0 {
-		query = sliceMapSet(query, "queue", req.Queues...)
-	}
-	if req.Limit != 0 {
-		query = sliceMapSet(query, "limit", strconv.Itoa(req.Limit))
-	}
-	if req.After != "" {
-		query = sliceMapSet(query, "after", req.After)
-	}
-	if req.Match != nil {
-		query = sliceMapSet(query, "match", req.Match.String())
-	}
-	var ret spoolStats
-	rt := RequestTrace{Op: OpSpoolStats, Spool: req.Spool}
+	var ret spool
+	rt := RequestTrace{Op: OpSpool, Spool: req.Spool}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
-		Path:     "/spools/" + req.Spool + "/stats",
-		Query:    query,
+		Path:     "/spools/" + req.Spool,
 		Recv:     &ret,
 	})
 	if err != nil {
-		return zero[SpoolStats](), resultError(err)
+		return zero[Spool](), resultError(err)
 	}
-	return ret.toSpoolStats(), nil
+	return ret.toSpool(), nil
 }
 
-// SpoolQueuesRequest describes a spool's queues to list, and their pagination.
-type SpoolQueuesRequest struct {
-	// Spool is the spool to list.
+// QueuesRequest describes a spool's queues to list, and their pagination.
+type QueuesRequest struct {
+	// Spool is the spool to list queues in.
 	Spool string
 
 	// Match is an optional filter keeping on the page only the queues whose
@@ -274,9 +237,9 @@ type SpoolQueuesRequest struct {
 	After string
 }
 
-// SpoolQueues lists one page of a spool's queues. For their message counts
-// use [Client.SpoolStats].
-func (c *Client) SpoolQueues(ctx context.Context, req SpoolQueuesRequest) (Page[Queue], error) {
+// Queues lists one page of a spool's queues, each with its settings and its
+// message counts.
+func (c *Client) Queues(ctx context.Context, req QueuesRequest) (Page[Queue], error) {
 	c.init()
 	if req.Spool == "" {
 		return zero[Page[Queue]](), errSpoolRequired
@@ -292,7 +255,7 @@ func (c *Client) SpoolQueues(ctx context.Context, req SpoolQueuesRequest) (Page[
 		query = sliceMapSet(query, "match", req.Match.String())
 	}
 	var ret page[queue]
-	rt := RequestTrace{Op: OpSpoolQueues, Spool: req.Spool}
+	rt := RequestTrace{Op: OpQueues, Spool: req.Spool}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -306,9 +269,9 @@ func (c *Client) SpoolQueues(ctx context.Context, req SpoolQueuesRequest) (Page[
 	return ret.toPage((*queue).toQueue), nil
 }
 
-// QueueMessagesRequest describes a queue's messages to list, and their
+// MessagesRequest describes a queue's messages to list, and their
 // pagination.
-type QueueMessagesRequest struct {
+type MessagesRequest struct {
 	// Spool is the spool the queue is in.
 	Spool string
 
@@ -339,8 +302,8 @@ type QueueMessagesRequest struct {
 	ReturnHandle bool
 }
 
-// QueueMessages lists one page of a queue's messages, without their payloads.
-func (c *Client) QueueMessages(ctx context.Context, req QueueMessagesRequest) (Page[Message], error) {
+// Messages lists one page of a queue's messages, without their payloads.
+func (c *Client) Messages(ctx context.Context, req MessagesRequest) (Page[Message], error) {
 	c.init()
 	if req.Spool == "" {
 		return zero[Page[Message]](), errSpoolRequired
@@ -369,7 +332,7 @@ func (c *Client) QueueMessages(ctx context.Context, req QueueMessagesRequest) (P
 		query = sliceMapSet(query, "handle", "true")
 	}
 	var ret page[message]
-	rt := RequestTrace{Op: OpQueueMessages, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{Op: OpMessages, Spool: req.Spool, Queue: req.Queue}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -445,8 +408,7 @@ type QueueRequest struct {
 	Queue string
 }
 
-// Queue reads a queue: its state and its settings. For its message counts
-// use [Client.SpoolStats].
+// Queue reads a queue: its state, its settings and its message counts.
 func (c *Client) Queue(ctx context.Context, req QueueRequest) (Queue, error) {
 	c.init()
 	if req.Spool == "" {

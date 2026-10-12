@@ -23,9 +23,12 @@ const (
 			"retentionSeconds": 3600,
 			"effectiveRetentionSeconds": 1800,
 			"recvRateLimit": {"intervalMicros": 1000, "burst": 10}
-		}
+		},
+		"stats": ` + testStatsJSON + `
 	}`
 	testStatsJSON = `{
+		"sampledAt": "2026-01-02T03:04:06Z",
+		"startedAt": "2026-01-01T00:00:00Z",
 		"total": 14,
 		"dataBytes": 1024,
 		"delayed": 1,
@@ -63,8 +66,11 @@ var (
 		CreatedAt: testCreatedAt,
 		State:     QueueStateActive,
 		Settings:  testSettings,
+		Stats:     testStats,
 	}
 	testStats = MessageStats{
+		SampledAt:      time.Date(2026, 1, 2, 3, 4, 6, 0, time.UTC),
+		StartedAt:      time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		Total:          14,
 		DataBytes:      1024,
 		Delayed:        1,
@@ -774,11 +780,11 @@ func TestDeleteQueue(t *testing.T) {
 	})
 }
 
-func TestSpoolQueues(t *testing.T) {
-	testOp(t, (*Client).SpoolQueues, []opCase[SpoolQueuesRequest, Page[Queue]]{
+func TestQueues(t *testing.T) {
+	testOp(t, (*Client).Queues, []opCase[QueuesRequest, Page[Queue]]{
 		{
 			name: "lists the last page",
-			req: SpoolQueuesRequest{
+			req: QueuesRequest{
 				Spool: "default",
 			},
 			wire: []exchange{
@@ -804,7 +810,7 @@ func TestSpoolQueues(t *testing.T) {
 		},
 		{
 			name: "a page with a cursor",
-			req: SpoolQueuesRequest{
+			req: QueuesRequest{
 				Spool: "default",
 				Limit: 1,
 				After: "alpha",
@@ -839,7 +845,7 @@ func TestSpoolQueues(t *testing.T) {
 		},
 		{
 			name: "an empty spool",
-			req: SpoolQueuesRequest{
+			req: QueuesRequest{
 				Spool: "default",
 			},
 			wire: []exchange{
@@ -860,7 +866,7 @@ func TestSpoolQueues(t *testing.T) {
 		},
 		{
 			name: "a suspended account is a verdict",
-			req: SpoolQueuesRequest{
+			req: QueuesRequest{
 				Spool: "default",
 			},
 			wire: []exchange{
@@ -882,24 +888,24 @@ func TestSpoolQueues(t *testing.T) {
 		},
 		{
 			name:   "spool is required",
-			req:    SpoolQueuesRequest{},
+			req:    QueuesRequest{},
 			expErr: errSpoolRequired,
 		},
 	})
 }
 
-func TestSpoolStats(t *testing.T) {
-	testOp(t, (*Client).SpoolStats, []opCase[SpoolStatsRequest, SpoolStats]{
+func TestSpool(t *testing.T) {
+	testOp(t, (*Client).Spool, []opCase[SpoolRequest, Spool]{
 		{
-			name: "reads the rollup and the last page of queues",
-			req: SpoolStatsRequest{
+			name: "reads the spool with its counts",
+			req: SpoolRequest{
 				Spool: "default",
 			},
 			wire: []exchange{
 				{
 					req: request{
 						method: "GET",
-						path:   "/v1/spools/default/stats",
+						path:   "/v1/spools/default",
 						header: http.Header{
 							"Accept": {"application/json"},
 						},
@@ -907,83 +913,29 @@ func TestSpoolStats(t *testing.T) {
 					res: response{
 						status: 200,
 						body: `{
+							"name": "default",
 							"queueCount": 3,
-							"stats": ` + testStatsJSON + `,
-							"queues": {
-								"items": [{
-									"name": "jobs",
-									"createdAt": "2026-01-02T03:04:05Z",
-									"state": "deleting",
-									"settings": {},
-									"stats": ` + testStatsJSON + `
-								}]
-							}
+							"stats": ` + testStatsJSON + `
 						}`,
 					},
 				},
 			},
-			exp: SpoolStats{
+			exp: Spool{
+				Name:       "default",
 				QueueCount: 3,
 				Stats:      testStats,
-				Queues: Page[QueueStats]{
-					Items: []QueueStats{
-						{
-							Name:      "jobs",
-							CreatedAt: testCreatedAt,
-							State:     QueueStateDeleting,
-							Stats:     testStats,
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "reads a selected page with a cursor to the next",
-			req: SpoolStatsRequest{
-				Spool:  "default",
-				Queues: []string{"jobs", "mail"},
-				Limit:  1,
-				After:  "alpha",
-				Match:  regexp.MustCompile(`^j`),
-			},
-			wire: []exchange{
-				{
-					req: request{
-						method: "GET",
-						path:   "/v1/spools/default/stats",
-						query: url.Values{
-							"queue": {"jobs", "mail"},
-							"limit": {"1"},
-							"after": {"alpha"},
-							"match": {"^j"},
-						},
-						header: http.Header{
-							"Accept": {"application/json"},
-						},
-					},
-					res: response{
-						status: 200,
-						body:   `{"queueCount":3,"stats":{},"queues":{"items":[],"next":"jobs"}}`,
-					},
-				},
-			},
-			exp: SpoolStats{
-				QueueCount: 3,
-				Queues: Page[QueueStats]{
-					Next: "jobs",
-				},
 			},
 		},
 		{
 			name: "bad credentials are a verdict",
-			req: SpoolStatsRequest{
+			req: SpoolRequest{
 				Spool: "default",
 			},
 			wire: []exchange{
 				{
 					req: request{
 						method: "GET",
-						path:   "/v1/spools/default/stats",
+						path:   "/v1/spools/default",
 						header: http.Header{
 							"Accept": {"application/json"},
 						},
@@ -998,17 +950,17 @@ func TestSpoolStats(t *testing.T) {
 		},
 		{
 			name:   "spool is required",
-			req:    SpoolStatsRequest{},
+			req:    SpoolRequest{},
 			expErr: errSpoolRequired,
 		},
 	})
 }
 
-func TestQueueMessages(t *testing.T) {
-	testOp(t, (*Client).QueueMessages, []opCase[QueueMessagesRequest, Page[Message]]{
+func TestMessages(t *testing.T) {
+	testOp(t, (*Client).Messages, []opCase[MessagesRequest, Page[Message]]{
 		{
 			name: "lists messages of every state",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool: "default",
 				Queue: "jobs",
 			},
@@ -1063,7 +1015,7 @@ func TestQueueMessages(t *testing.T) {
 		},
 		{
 			name: "lists failed messages with handles and a cursor to the next",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool:        "default",
 				Queue:        "jobs",
 				State:        MessageStateFailed,
@@ -1107,7 +1059,7 @@ func TestQueueMessages(t *testing.T) {
 		},
 		{
 			name: "a state this SDK does not know fails the read",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool: "default",
 				Queue: "jobs",
 			},
@@ -1130,7 +1082,7 @@ func TestQueueMessages(t *testing.T) {
 		},
 		{
 			name: "a state that is not a string fails the read",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool: "default",
 				Queue: "jobs",
 			},
@@ -1153,7 +1105,7 @@ func TestQueueMessages(t *testing.T) {
 		},
 		{
 			name: "an unknown state is refused",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool: "default",
 				Queue: "jobs",
 				State: MessageState(99),
@@ -1162,7 +1114,7 @@ func TestQueueMessages(t *testing.T) {
 		},
 		{
 			name: "a missing queue is a verdict",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool: "default",
 				Queue: "jobs",
 			},
@@ -1185,14 +1137,14 @@ func TestQueueMessages(t *testing.T) {
 		},
 		{
 			name: "spool is required",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Queue: "jobs",
 			},
 			expErr: errSpoolRequired,
 		},
 		{
 			name: "queue is required",
-			req: QueueMessagesRequest{
+			req: MessagesRequest{
 				Spool: "default",
 			},
 			expErr: errQueueRequired,

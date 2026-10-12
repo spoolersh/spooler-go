@@ -8,9 +8,18 @@ import (
 )
 
 type (
-	// MessageStats counts messages by state, and cumulative totals since the
-	// server last restarted.
+	// MessageStats counts messages by state as of SampledAt, and cumulative
+	// totals since StartedAt.
 	MessageStats struct {
+		// SampledAt is when the counts were taken; equal values mean one
+		// snapshot.
+		SampledAt time.Time
+
+		// StartedAt is when the totals started from zero. A restart or a
+		// failover moves it and starts them over, so compute rates only
+		// between samples with equal StartedAt.
+		StartedAt time.Time
+
 		// Total is the stored messages, every state counted.
 		Total int64
 
@@ -55,25 +64,29 @@ type (
 		ExpiredTotal int64
 	}
 	messageStats struct {
-		Total          int64 `json:"total"`
-		DataBytes      int64 `json:"dataBytes"`
-		Delayed        int64 `json:"delayed"`
-		Visible        int64 `json:"visible"`
-		Pending        int64 `json:"pending"`
-		Failed         int64 `json:"failed"`
-		Unavailable    int64 `json:"unavailable"`
-		AddedTotal     int64 `json:"addedTotal"`
-		AckedTotal     int64 `json:"ackedTotal"`
-		NackedTotal    int64 `json:"nackedTotal"`
-		ReleasedTotal  int64 `json:"releasedTotal"`
-		FailedTotal    int64 `json:"failedTotal"`
-		DiscardedTotal int64 `json:"discardedTotal"`
-		ExpiredTotal   int64 `json:"expiredTotal"`
+		SampledAt      time.Time `json:"sampledAt"`
+		StartedAt      time.Time `json:"startedAt"`
+		Total          int64     `json:"total"`
+		DataBytes      int64     `json:"dataBytes"`
+		Delayed        int64     `json:"delayed"`
+		Visible        int64     `json:"visible"`
+		Pending        int64     `json:"pending"`
+		Failed         int64     `json:"failed"`
+		Unavailable    int64     `json:"unavailable"`
+		AddedTotal     int64     `json:"addedTotal"`
+		AckedTotal     int64     `json:"ackedTotal"`
+		NackedTotal    int64     `json:"nackedTotal"`
+		ReleasedTotal  int64     `json:"releasedTotal"`
+		FailedTotal    int64     `json:"failedTotal"`
+		DiscardedTotal int64     `json:"discardedTotal"`
+		ExpiredTotal   int64     `json:"expiredTotal"`
 	}
 )
 
 func (m *messageStats) toMessageStats() MessageStats {
 	return MessageStats{
+		SampledAt:      m.SampledAt,
+		StartedAt:      m.StartedAt,
 		Total:          m.Total,
 		DataBytes:      m.DataBytes,
 		Delayed:        m.Delayed,
@@ -342,50 +355,7 @@ func (q *queueState) UnmarshalJSON(p []byte) error {
 }
 
 type (
-	// QueueStats is a queue with its message counts, as
-	// [Client.SpoolStats] lists them.
-	QueueStats struct {
-		// Name is the queue's name.
-		Name string
-
-		// UID is the queue's uid, as on [Queue].
-		UID string
-
-		// CreatedAt is when the queue was created.
-		CreatedAt time.Time
-
-		// State is the state the queue is in.
-		State QueueState
-
-		// Settings is the queue's settings, as applied.
-		Settings QueueSettings
-
-		// Stats is the queue's message counts.
-		Stats MessageStats
-	}
-	queueStats struct {
-		Name      string        `json:"name"`
-		UID       string        `json:"uid"`
-		CreatedAt time.Time     `json:"createdAt"`
-		State     queueState    `json:"state"`
-		Settings  queueSettings `json:"settings"`
-		Stats     messageStats  `json:"stats"`
-	}
-)
-
-func (q *queueStats) toQueueStats() QueueStats {
-	return QueueStats{
-		Name:      q.Name,
-		UID:       q.UID,
-		CreatedAt: q.CreatedAt,
-		State:     QueueState(q.State),
-		Settings:  q.Settings.toQueueSettings(),
-		Stats:     q.Stats.toMessageStats(),
-	}
-}
-
-type (
-	// Queue is a queue as [Client.Queue] and [Client.SpoolQueues] describe
+	// Queue is a queue as [Client.Queue] and [Client.Queues] describe
 	// it.
 	Queue struct {
 		// Name is the queue's name.
@@ -404,6 +374,10 @@ type (
 
 		// Settings is the queue's settings, as applied.
 		Settings QueueSettings
+
+		// Stats is the queue's message counts, from the same snapshot as the
+		// rest; all zero on the queue a create returns.
+		Stats MessageStats
 	}
 	queue struct {
 		Name      string        `json:"name"`
@@ -411,6 +385,7 @@ type (
 		CreatedAt time.Time     `json:"createdAt"`
 		State     queueState    `json:"state"`
 		Settings  queueSettings `json:"settings"`
+		Stats     messageStats  `json:"stats"`
 	}
 )
 
@@ -421,6 +396,7 @@ func (q *queue) toQueue() Queue {
 		CreatedAt: q.CreatedAt,
 		State:     QueueState(q.State),
 		Settings:  q.Settings.toQueueSettings(),
+		Stats:     q.Stats.toMessageStats(),
 	}
 }
 
@@ -455,30 +431,31 @@ func (p *page[A]) toPage[B any](conv func(*A) B) Page[B] {
 }
 
 type (
-	// SpoolStats is the live view of a spool that [Client.SpoolStats] reads.
-	SpoolStats struct {
-		// QueueCount is the number of queues on the spool, whatever the
-		// page selects.
+	// Spool is a spool as [Client.Spool] describes it.
+	Spool struct {
+		// Name is the spool's name.
+		Name string
+
+		// QueueCount is the number of queues on the spool.
 		QueueCount int64
 
-		// Stats is the message counts rolled up across every queue.
+		// Stats is the message counts summed across every queue. The
+		// cumulative totals are the spool's own and keep counting deleted
+		// queues, so they are not a sum over the queues listed.
 		Stats MessageStats
-
-		// Queues is one page of the queues, each with its counts.
-		Queues Page[QueueStats]
 	}
-	spoolStats struct {
-		QueueCount int64            `json:"queueCount"`
-		Stats      messageStats     `json:"stats"`
-		Queues     page[queueStats] `json:"queues"`
+	spool struct {
+		Name       string       `json:"name"`
+		QueueCount int64        `json:"queueCount"`
+		Stats      messageStats `json:"stats"`
 	}
 )
 
-func (s *spoolStats) toSpoolStats() (ret SpoolStats) {
-	return SpoolStats{
+func (s *spool) toSpool() Spool {
+	return Spool{
+		Name:       s.Name,
 		QueueCount: s.QueueCount,
 		Stats:      s.Stats.toMessageStats(),
-		Queues:     s.Queues.toPage((*queueStats).toQueueStats),
 	}
 }
 
@@ -531,7 +508,7 @@ func (q *messageState) UnmarshalJSON(p []byte) error {
 }
 
 type (
-	// Message is a message as [Client.QueueMessages] lists it.
+	// Message is a message as [Client.Messages] lists it.
 	Message struct {
 		// ID is the message id.
 		ID string

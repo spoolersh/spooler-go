@@ -50,7 +50,7 @@ func integrationClient(t *testing.T) *Client {
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 		for {
-			_, err := c.SpoolQueues(ctx, SpoolQueuesRequest{
+			_, err := c.Queues(ctx, QueuesRequest{
 				Spool: integrationSpool,
 			})
 			if err == nil {
@@ -362,7 +362,7 @@ func TestIntegrationSettle(t *testing.T) {
 				return
 			}
 
-			page, err := c.QueueMessages(t.Context(), QueueMessagesRequest{
+			page, err := c.Messages(t.Context(), MessagesRequest{
 				Spool: integrationSpool,
 				Queue: queue,
 			})
@@ -487,7 +487,7 @@ func TestIntegrationDelay(t *testing.T) {
 		Data:         []byte("later"),
 	})
 	assertEmpty(t, c, queue, "before the delay")
-	page, err := c.QueueMessages(t.Context(), QueueMessagesRequest{
+	page, err := c.Messages(t.Context(), MessagesRequest{
 		Spool: integrationSpool,
 		Queue: queue,
 		State: MessageStateDelayed,
@@ -625,7 +625,7 @@ func TestIntegrationFailed(t *testing.T) {
 			}
 			assertEmpty(t, c, queue, "after the last retry")
 
-			page, err := c.QueueMessages(t.Context(), QueueMessagesRequest{
+			page, err := c.Messages(t.Context(), MessagesRequest{
 				Spool:        integrationSpool,
 				Queue:        queue,
 				State:        MessageStateFailed,
@@ -706,7 +706,7 @@ func TestIntegrationFailed(t *testing.T) {
 				)
 			}
 
-			page, err = c.QueueMessages(t.Context(), QueueMessagesRequest{
+			page, err = c.Messages(t.Context(), MessagesRequest{
 				Spool: integrationSpool,
 				Queue: queue,
 			})
@@ -882,26 +882,35 @@ func TestIntegrationQueues(t *testing.T) {
 	send(t, c, queue, SendRequest{
 		Data: []byte("counted"),
 	})
-	stats, err := c.SpoolStats(t.Context(), SpoolStatsRequest{
-		Spool:  integrationSpool,
-		Queues: []string{queue},
+	q, err := c.Queue(t.Context(), QueueRequest{
+		Spool: integrationSpool,
+		Queue: queue,
 	})
 	if err != nil {
 		t.Fatalf(
-			"stats: %v",
+			"queue: %v",
 			err,
 		)
 	}
-	if act, exp := len(stats.Queues.Items), 1; act != exp {
-		t.Fatalf(
-			"queues in stats: %d; want %d",
-			act, exp,
-		)
-	}
-	if act, exp := stats.Queues.Items[0].Stats.Visible, int64(1); act != exp {
+	if act, exp := q.Stats.Visible, int64(1); act != exp {
 		t.Errorf(
 			"visible: %d; want %d",
 			act, exp,
+		)
+	}
+	sp, err := c.Spool(t.Context(), SpoolRequest{
+		Spool: integrationSpool,
+	})
+	if err != nil {
+		t.Fatalf(
+			"spool: %v",
+			err,
+		)
+	}
+	if sp.QueueCount < 1 {
+		t.Errorf(
+			"queue count: %d; want at least 1",
+			sp.QueueCount,
 		)
 	}
 

@@ -67,9 +67,9 @@ type Op uint
 // The operations, one per [Client] method.
 const (
 	OpUnknown Op = iota
-	OpSpoolStats
-	OpSpoolQueues
-	OpQueueMessages
+	OpSpool
+	OpQueues
+	OpMessages
 	OpCreateQueue
 	OpQueue
 	OpUpdateQueue
@@ -88,24 +88,24 @@ const (
 )
 
 var opNames = map[Op]string{
-	OpSpoolStats:    "SpoolStats",
-	OpSpoolQueues:   "SpoolQueues",
-	OpQueueMessages: "QueueMessages",
-	OpCreateQueue:   "CreateQueue",
-	OpQueue:         "Queue",
-	OpUpdateQueue:   "UpdateQueue",
-	OpDeleteQueue:   "DeleteQueue",
-	OpSend:          "Send",
-	OpAckAndSend:    "AckAndSend",
-	OpRecv:          "Recv",
-	OpRenew:         "Renew",
-	OpAck:           "Ack",
-	OpNack:          "Nack",
-	OpRelease:       "Release",
-	OpFail:          "Fail",
-	OpDiscard:       "Discard",
-	OpInspect:       "Inspect",
-	OpRecover:       "Recover",
+	OpSpool:       "Spool",
+	OpQueues:      "Queues",
+	OpMessages:    "Messages",
+	OpCreateQueue: "CreateQueue",
+	OpQueue:       "Queue",
+	OpUpdateQueue: "UpdateQueue",
+	OpDeleteQueue: "DeleteQueue",
+	OpSend:        "Send",
+	OpAckAndSend:  "AckAndSend",
+	OpRecv:        "Recv",
+	OpRenew:       "Renew",
+	OpAck:         "Ack",
+	OpNack:        "Nack",
+	OpRelease:     "Release",
+	OpFail:        "Fail",
+	OpDiscard:     "Discard",
+	OpInspect:     "Inspect",
+	OpRecover:     "Recover",
 }
 
 // String names the operation as the method is named.
