@@ -201,7 +201,10 @@ func (c *Client) Spool(ctx context.Context, req SpoolRequest) (Spool, error) {
 		return zero[Spool](), errSpoolRequired
 	}
 	var ret spool
-	rt := RequestTrace{Op: OpSpool, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpSpool,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -255,7 +258,10 @@ func (c *Client) Queues(ctx context.Context, req QueuesRequest) (Page[Queue], er
 		query = sliceMapSet(query, "match", req.Match.String())
 	}
 	var ret page[queue]
-	rt := RequestTrace{Op: OpQueues, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpQueues,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -332,7 +338,11 @@ func (c *Client) Messages(ctx context.Context, req MessagesRequest) (Page[Messag
 		query = sliceMapSet(query, "handle", "true")
 	}
 	var ret page[message]
-	rt := RequestTrace{Op: OpMessages, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpMessages,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -385,7 +395,11 @@ func (c *Client) CreateQueue(ctx context.Context, req CreateQueueRequest) (Queue
 		return zero[Queue](), errQueueRequired
 	}
 	var ret queue
-	rt := RequestTrace{Op: OpCreateQueue, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpCreateQueue,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	_, err := c.do(ctx, rt, "PUT", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -418,7 +432,11 @@ func (c *Client) Queue(ctx context.Context, req QueueRequest) (Queue, error) {
 		return zero[Queue](), errQueueRequired
 	}
 	var ret queue
-	rt := RequestTrace{Op: OpQueue, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpQueue,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	_, err := c.do(ctx, rt, "GET", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -464,7 +482,11 @@ func (c *Client) UpdateQueue(ctx context.Context, req UpdateQueueRequest) error 
 	if uid := req.QueueUID; uid != "" {
 		query = sliceMapSet(query, "uid", uid)
 	}
-	rt := RequestTrace{Op: OpUpdateQueue, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpUpdateQueue,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	_, err := c.do(ctx, rt, "PATCH", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -518,7 +540,11 @@ func (c *Client) DeleteQueue(ctx context.Context, req DeleteQueueRequest) error 
 	if uid := req.QueueUID; uid != "" {
 		query.Set("uid", uid)
 	}
-	rt := RequestTrace{Op: OpDeleteQueue, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpDeleteQueue,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	_, err = c.do(ctx, rt, "DELETE", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -710,7 +736,11 @@ func (c *Client) Send(ctx context.Context, req SendRequest) (SendResult, error) 
 	if req.RetryUnknown {
 		retry = retrySendUnknown
 	}
-	rt := RequestTrace{Op: OpSend, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpSend,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -839,7 +869,11 @@ func (c *Client) AckAndSend(ctx context.Context, req AckAndSendRequest) (AckAndS
 	if req.RetryUnknown {
 		retry = retrySendUnknown
 	}
-	rt := RequestTrace{Op: OpAckAndSend, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpAckAndSend,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -973,7 +1007,11 @@ func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok 
 		}
 		query = sliceMapSet(query, "waitSeconds", strconv.Itoa(*w))
 	}
-	rt := RequestTrace{Op: OpRecv, Spool: req.Spool, Queue: req.Queue}
+	rt := RequestTrace{
+		Op:    OpRecv,
+		Spool: req.Spool,
+		Queue: req.Queue,
+	}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1050,7 +1088,10 @@ func (c *Client) Renew(ctx context.Context, req RenewRequest) (RenewResult, erro
 	header := http.Header{
 		headerLease: {string(req.Lease)},
 	}
-	rt := RequestTrace{Op: OpRenew, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpRenew,
+		Spool: req.Spool,
+	}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1092,7 +1133,10 @@ func (c *Client) Ack(ctx context.Context, req AckRequest) error {
 	header := http.Header{
 		headerLease: {string(req.Lease)},
 	}
-	rt := RequestTrace{Op: OpAck, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpAck,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1124,7 +1168,10 @@ func (c *Client) Nack(ctx context.Context, req NackRequest) error {
 	header := http.Header{
 		headerLease: {string(req.Lease)},
 	}
-	rt := RequestTrace{Op: OpNack, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpNack,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1165,7 +1212,10 @@ func (c *Client) Release(ctx context.Context, req ReleaseRequest) error {
 	if d := req.DelaySeconds; d != 0 {
 		header.Set(headerDelay, strconv.Itoa(d))
 	}
-	rt := RequestTrace{Op: OpRelease, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpRelease,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1196,7 +1246,10 @@ func (c *Client) Fail(ctx context.Context, req FailRequest) error {
 	header := http.Header{
 		headerLease: {string(req.Lease)},
 	}
-	rt := RequestTrace{Op: OpFail, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpFail,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1237,7 +1290,10 @@ func (c *Client) Discard(ctx context.Context, req DiscardRequest) error {
 	default:
 		return errLeaseOrHandle
 	}
-	rt := RequestTrace{Op: OpDiscard, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpDiscard,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1294,7 +1350,10 @@ func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult
 		buf = bytes.NewBuffer(nil)
 		dst = buf
 	}
-	rt := RequestTrace{Op: OpInspect, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpInspect,
+		Spool: req.Spool,
+	}
 	res, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
@@ -1362,7 +1421,10 @@ func (c *Client) Recover(ctx context.Context, req RecoverRequest) error {
 	if d := req.DelaySeconds; d != 0 {
 		header.Set(headerDelay, strconv.Itoa(d))
 	}
-	rt := RequestTrace{Op: OpRecover, Spool: req.Spool}
+	rt := RequestTrace{
+		Op:    OpRecover,
+		Spool: req.Spool,
+	}
 	_, err := c.do(ctx, rt, "POST", httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,

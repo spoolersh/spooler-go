@@ -278,13 +278,19 @@ func TestIntegrationSettle(t *testing.T) {
 		{
 			name: "ack removes the message",
 			settle: func(c *Client, ctx context.Context, spool string, l Lease) error {
-				return c.Ack(ctx, AckRequest{Spool: spool, Lease: l})
+				return c.Ack(ctx, AckRequest{
+					Spool: spool,
+					Lease: l,
+				})
 			},
 		},
 		{
 			name: "nack returns it and counts a retry",
 			settle: func(c *Client, ctx context.Context, spool string, l Lease) error {
-				return c.Nack(ctx, NackRequest{Spool: spool, Lease: l})
+				return c.Nack(ctx, NackRequest{
+					Spool: spool,
+					Lease: l,
+				})
 			},
 			redelivered: true,
 			expRetries:  1,
@@ -292,21 +298,30 @@ func TestIntegrationSettle(t *testing.T) {
 		{
 			name: "release returns it without a retry",
 			settle: func(c *Client, ctx context.Context, spool string, l Lease) error {
-				return c.Release(ctx, ReleaseRequest{Spool: spool, Lease: l})
+				return c.Release(ctx, ReleaseRequest{
+					Spool: spool,
+					Lease: l,
+				})
 			},
 			redelivered: true,
 		},
 		{
 			name: "fail marks it failed",
 			settle: func(c *Client, ctx context.Context, spool string, l Lease) error {
-				return c.Fail(ctx, FailRequest{Spool: spool, Lease: l})
+				return c.Fail(ctx, FailRequest{
+					Spool: spool,
+					Lease: l,
+				})
 			},
 			expState: MessageStateFailed,
 		},
 		{
 			name: "discard removes it",
 			settle: func(c *Client, ctx context.Context, spool string, l Lease) error {
-				return c.Discard(ctx, DiscardRequest{Spool: spool, Lease: l})
+				return c.Discard(ctx, DiscardRequest{
+					Spool: spool,
+					Lease: l,
+				})
 			},
 		},
 	} {
@@ -590,14 +605,20 @@ func TestIntegrationFailed(t *testing.T) {
 		{
 			name: "recover returns it with its retries reset",
 			act: func(c *Client, ctx context.Context, spool string, h Handle) error {
-				return c.Recover(ctx, RecoverRequest{Spool: spool, Handle: h})
+				return c.Recover(ctx, RecoverRequest{
+					Spool:  spool,
+					Handle: h,
+				})
 			},
 			expLeft: 1,
 		},
 		{
 			name: "discard drops it",
 			act: func(c *Client, ctx context.Context, spool string, h Handle) error {
-				return c.Discard(ctx, DiscardRequest{Spool: spool, Handle: h})
+				return c.Discard(ctx, DiscardRequest{
+					Spool:  spool,
+					Handle: h,
+				})
 			},
 		},
 	} {

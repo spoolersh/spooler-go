@@ -64,7 +64,9 @@ func Example() {
 // ticker, and stop renewing once the message is settled.
 func ExampleClient_Renew() {
 	ctx := context.Background()
-	c := spooler.Client{APIKey: "..."}
+	c := spooler.Client{
+		APIKey: "...",
+	}
 
 	msg, ok, err := c.Recv(ctx, spooler.RecvRequest{
 		Spool:       "default",
@@ -92,7 +94,9 @@ func ExampleClient_Renew() {
 // dedup window returns the original message instead of appending another.
 func ExampleClient_Send_dedup() {
 	ctx := context.Background()
-	c := spooler.Client{APIKey: "..."}
+	c := spooler.Client{
+		APIKey: "...",
+	}
 
 	res, err := c.Send(ctx, spooler.SendRequest{
 		Spool: "default",
@@ -112,7 +116,9 @@ func ExampleClient_Send_dedup() {
 // errors.Is, and read a kind's details with errors.As.
 func ExampleError() {
 	ctx := context.Background()
-	c := spooler.Client{APIKey: "..."}
+	c := spooler.Client{
+		APIKey: "...",
+	}
 
 	_, err := c.Queue(ctx, spooler.QueueRequest{
 		Spool: "default",
