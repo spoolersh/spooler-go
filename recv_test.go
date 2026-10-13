@@ -1,6 +1,7 @@
 package spooler
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/url"
@@ -521,6 +522,185 @@ func TestInspect(t *testing.T) {
 			expErr: errHandleRequired,
 		},
 	})
+}
+
+// TestRecvTrace checks that a receive is one operation that ends once, when
+// the payload has been read, the stream closed or the body failed, with the
+// failure if any.
+func TestRecvTrace(t *testing.T) {
+	leased := response{
+		status: 200,
+		header: http.Header{
+			"Spooler-Lease":           {"lease-1"},
+			"Spooler-Message-Id":      {"1-1"},
+			"Spooler-Message-Retries": {"0"},
+		},
+		body: "hello",
+	}
+	cut := response{
+		status:  200,
+		header:  leased.header,
+		body:    "hel",
+		bodyErr: io.ErrUnexpectedEOF,
+		size:    5,
+	}
+	recv := request{
+		method: "POST",
+		path:   "/v1/spools/default/queues/jobs/recv",
+		header: http.Header{
+			"Accept": {"application/octet-stream"},
+		},
+	}
+	for _, test := range []struct {
+		name   string
+		stream bool
+		res    response
+
+		// read is what the caller does with the stream; nil reads nothing.
+		read func(*testing.T, RecvResult)
+
+		// ends is each end's error as the hook got it, in order; nil must
+		// be nil, the rest is matched with errors.Is.
+		ends  []error
+		expID string // The id the result must carry, when set.
+	}{
+		{
+			name: "a buffered receive ends after the payload is read",
+			res:  leased,
+			ends: []error{nil},
+		},
+		{
+			// Buffered, the SDK reads and classifies: the hook sees the
+			// error the caller gets, an unknown result.
+			name:  "a buffered read cut short ends with the result unknown",
+			res:   cut,
+			ends:  []error{ErrResultUnknown},
+			expID: "1-1",
+		},
+		{
+			name:   "a stream read to its end ends the operation at EOF",
+			stream: true,
+			res:    leased,
+			read: func(t *testing.T, msg RecvResult) {
+				if _, err := io.ReadAll(msg.DataStream); err != nil {
+					t.Fatalf(
+						"read: %v",
+						err,
+					)
+				}
+			},
+			ends: []error{nil},
+		},
+		{
+			name:   "a stream closed before its end ends the operation cleanly",
+			stream: true,
+			res:    leased,
+			read: func(t *testing.T, msg RecvResult) {
+				msg.DataStream.Close()
+			},
+			ends: []error{nil},
+		},
+		{
+			name:   "a stream cut short ends the operation with an unexpected EOF",
+			stream: true,
+			res:    cut,
+			read: func(t *testing.T, msg RecvResult) {
+				io.ReadAll(msg.DataStream)
+			},
+			ends:  []error{io.ErrUnexpectedEOF},
+			expID: "1-1",
+		},
+		{
+			name:   "a close after EOF, and a second close, end nothing again",
+			stream: true,
+			res:    leased,
+			read: func(t *testing.T, msg RecvResult) {
+				io.ReadAll(msg.DataStream)
+				msg.DataStream.Close()
+				msg.DataStream.Close()
+			},
+			ends: []error{nil},
+		},
+		{
+			name: "no message ends at once",
+			res: response{
+				status: 204,
+			},
+			ends: []error{nil},
+		},
+		{
+			name:   "a stream neither read nor closed leaves the operation open",
+			stream: true,
+			res:    leased,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				var (
+					started int
+					ends    []error
+				)
+				c := &Client{
+					Trace: ClientTrace{
+						OnRequest: func(_ context.Context, rt RequestTrace) func(error) {
+							if act, exp := rt.Op, OpRecv; act != exp {
+								t.Errorf(
+									"op: %v; want %v",
+									act, exp,
+								)
+							}
+							started++
+							return func(err error) {
+								ends = append(ends, err)
+							}
+						},
+					},
+				}
+				done := stubWire(t, c, []exchange{
+					{
+						req: recv,
+						res: test.res,
+					},
+				})
+				msg, _, _ := c.Recv(t.Context(), RecvRequest{
+					Spool:  "default",
+					Queue:  "jobs",
+					Stream: test.stream,
+				})
+				if test.read != nil {
+					test.read(t, msg)
+				}
+				done()
+				if act, exp := msg.ID, test.expID; exp != "" && act != exp {
+					t.Errorf(
+						"id: %q; want %q",
+						act, exp,
+					)
+				}
+				if act, exp := started, 1; act != exp {
+					t.Errorf(
+						"operations started: %d; want %d",
+						act, exp,
+					)
+				}
+				if act, exp := len(ends), len(test.ends); act != exp {
+					t.Fatalf(
+						"ends: %d; want %d",
+						act, exp,
+					)
+				}
+				for i, exp := range test.ends {
+					assertError(t, ends[i], exp, false)
+				}
+				// A stream left open holds the transport's goroutine, which
+				// the bubble cannot exit with; the assertions above are what
+				// the row is about.
+				if msg.DataStream != nil {
+					msg.DataStream.Close()
+				}
+			})
+		})
+	}
 }
 
 // TestRecvStream covers the payload handed back unread: the generic runner
