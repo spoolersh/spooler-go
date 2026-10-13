@@ -263,7 +263,6 @@ func (k ErrorKind) String() string { return enumString("ErrorKind", errorKind2st
 // [errors.Is]. The package declares one per kind, as ErrQueueNotFound; a
 // KindError is never returned itself.
 type KindError struct {
-	// Kind is the kind the sentinel stands for.
 	Kind ErrorKind
 }
 
@@ -324,7 +323,6 @@ func (e *UnknownHeaderError) Error() string {
 
 // RetentionLimitError is the details of an [ErrorKindRetentionLimit] answer.
 type RetentionLimitError struct {
-	// Max is the retention limit.
 	Max time.Duration
 }
 
@@ -335,7 +333,6 @@ func (e *RetentionLimitError) Error() string {
 
 // QueueLimitError is the details of an [ErrorKindQueueLimit] answer.
 type QueueLimitError struct {
-	// Max is the queue limit.
 	Max int64
 }
 
@@ -346,7 +343,6 @@ func (e *QueueLimitError) Error() string {
 
 // QueueNotFoundError is the details of an [ErrorKindQueueNotFound] answer.
 type QueueNotFoundError struct {
-	// Queue is the queue name that was addressed.
 	Queue string
 }
 
@@ -410,7 +406,6 @@ type SpoolFullError struct {
 	// field it is enforced against.
 	Limit SpoolLimit
 
-	// Max is the cap.
 	Max int64
 }
 

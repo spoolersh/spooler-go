@@ -40,10 +40,7 @@ type ClientTrace struct {
 
 // RequestTrace describes the operation an OnRequest hook is called for.
 type RequestTrace struct {
-	// Op is the operation.
-	Op Op
-
-	// Spool is the spool the operation names.
+	Op    Op
 	Spool string
 
 	// Queue is the queue the operation names, or empty for a spool-scoped

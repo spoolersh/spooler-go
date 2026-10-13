@@ -26,16 +26,12 @@ type (
 		// DataBytes is the payload bytes of the counted messages.
 		DataBytes int64
 
-		// Delayed is the messages delayed.
 		Delayed int64
-
-		// Visible is the messages visible.
 		Visible int64
 
 		// Pending is the messages leased.
 		Pending int64
 
-		// Failed is the messages failed.
 		Failed int64
 
 		// Unavailable is the messages whose payload the service could not
@@ -45,19 +41,10 @@ type (
 		// AddedTotal is the messages sent, duplicates excluded.
 		AddedTotal int64
 
-		// AckedTotal is the messages acked.
-		AckedTotal int64
-
-		// NackedTotal is the messages nacked.
-		NackedTotal int64
-
-		// ReleasedTotal is the deliveries released.
-		ReleasedTotal int64
-
-		// FailedTotal is the messages failed.
-		FailedTotal int64
-
-		// DiscardedTotal is the messages discarded.
+		AckedTotal     int64
+		NackedTotal    int64
+		ReleasedTotal  int64
+		FailedTotal    int64
 		DiscardedTotal int64
 
 		// ExpiredTotal is the messages discarded by retention.
@@ -358,7 +345,6 @@ type (
 	// Queue is a queue as [Client.Queue] and [Client.Queues] describe
 	// it.
 	Queue struct {
-		// Name is the queue's name.
 		Name string
 
 		// UID is unique to this queue, opaque: a queue created again under
@@ -366,11 +352,8 @@ type (
 		// [DeleteQueueRequest.QueueUID] to delete this queue only.
 		UID string
 
-		// CreatedAt is when the queue was created.
 		CreatedAt time.Time
-
-		// State is the state the queue is in.
-		State QueueState
+		State     QueueState
 
 		// Settings is the queue's settings, as applied.
 		Settings QueueSettings
@@ -404,8 +387,8 @@ type (
 	// Page is one page of a listing. Every listing is paged the same way:
 	// pass Next as the next request's After until it comes back empty.
 	Page[T any] struct {
-		// Items is the page.
 		Items []T
+
 		// Next is the cursor of the following page; empty when this page
 		// ends the listing.
 		Next string
@@ -433,10 +416,7 @@ func (p *page[A]) toPage[B any](conv func(*A) B) Page[B] {
 type (
 	// Spool is a spool as [Client.Spool] describes it.
 	Spool struct {
-		// Name is the spool's name.
-		Name string
-
-		// QueueCount is the number of queues on the spool.
+		Name       string
 		QueueCount int64
 
 		// Stats is the message counts summed across every queue. The
@@ -510,10 +490,7 @@ func (q *messageState) UnmarshalJSON(p []byte) error {
 type (
 	// Message is a message as [Client.Messages] lists it.
 	Message struct {
-		// ID is the message id.
-		ID string
-
-		// State is the state the message is in.
+		ID    string
 		State MessageState
 
 		// Retries is the redeliveries so far.

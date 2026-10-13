@@ -247,6 +247,12 @@ addition:
   by reading `go doc -all .` as a user would.
 - Comments are concise, not memoirs: say what a thing is or does in one line; a
   non-obvious *why* only when the code cannot. One field, one doc comment.
+- A doc comment on a field exists only when it says something
+  the name and the type do not. "Err is the failure" or "Name is the queue's
+  name" restates the declaration and is left out; "Sent reports whether the
+  request may have reached the server" is kept. This exception applies only
+  to fields. Exported variables and constants still require documentation,
+  individually or as a group.
 - The SDK never coins vocabulary. Every noun and verb of the domain in a
   name, a doc comment or the README is one the public docs already use for
   the same thing: lease, handle, spool, queue, settle, deliver, append,
@@ -283,7 +289,19 @@ addition:
 - In a struct declaration, a field that carries a doc comment is separated
   from the field before it by a blank line, so that the comment reads as
   the field's own and not as a trailer of the previous one. Fields without
-  comments may sit together.
+  comments sit together with no blank line between them, unless a blank
+  line separates groups that belong together, such as a type's settings
+  from its runtime state; a blank line also separates such a group from a
+  commented field on either side:
+
+      // Xxx doc is here.
+      Xxx any
+
+      Foo int
+      Bar string
+
+      // Baz doc is here.
+      Baz any
 - Struct literals one field per line, even for one field. `fmt.Errorf` and
   `t.Errorf` broken so the format string and each argument sit on their own
   line.

@@ -189,7 +189,6 @@ func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req htt
 
 // SpoolRequest describes a spool to read.
 type SpoolRequest struct {
-	// Spool is the name of the spool to read.
 	Spool string
 }
 
@@ -219,7 +218,6 @@ func (c *Client) Spool(ctx context.Context, req SpoolRequest) (Spool, error) {
 
 // QueuesRequest describes a spool's queues to list, and their pagination.
 type QueuesRequest struct {
-	// Spool is the spool to list queues in.
 	Spool string
 
 	// Match is an optional filter keeping on the page only the queues whose
@@ -278,10 +276,7 @@ func (c *Client) Queues(ctx context.Context, req QueuesRequest) (Page[Queue], er
 // MessagesRequest describes a queue's messages to list, and their
 // pagination.
 type MessagesRequest struct {
-	// Spool is the spool the queue is in.
 	Spool string
-
-	// Queue is the queue to list messages in.
 	Queue string
 
 	// State is an optional filter keeping only messages in this state on
@@ -359,10 +354,7 @@ func (c *Client) Messages(ctx context.Context, req MessagesRequest) (Page[Messag
 // CreateQueueRequest describes a queue to create and the settings to create it
 // with.
 type CreateQueueRequest struct {
-	// Spool is the spool to create the queue in.
 	Spool string
-
-	// Queue is the queue's name.
 	Queue string
 
 	// Settings are optional settings to apply.
@@ -415,10 +407,7 @@ func (c *Client) CreateQueue(ctx context.Context, req CreateQueueRequest) (Queue
 
 // QueueRequest describes a queue to read.
 type QueueRequest struct {
-	// Spool is the spool the queue is in.
 	Spool string
-
-	// Queue is the queue's name.
 	Queue string
 }
 
@@ -451,10 +440,7 @@ func (c *Client) Queue(ctx context.Context, req QueueRequest) (Queue, error) {
 
 // UpdateQueueRequest describes a queue and the settings to replace on it.
 type UpdateQueueRequest struct {
-	// Spool is the spool the queue is in.
 	Spool string
-
-	// Queue is the queue's name.
 	Queue string
 
 	// QueueUID is an optional uid of the queue to update, as [Queue.UID]
@@ -499,10 +485,7 @@ func (c *Client) UpdateQueue(ctx context.Context, req UpdateQueueRequest) error 
 
 // DeleteQueueRequest describes a queue to delete and how.
 type DeleteQueueRequest struct {
-	// Spool is the spool the queue is in.
 	Spool string
-
-	// Queue is the queue's name.
 	Queue string
 
 	// QueueUID is an optional uid of the queue to delete, as [Queue.UID]
@@ -513,7 +496,6 @@ type DeleteQueueRequest struct {
 	// Zero deletes whatever queue has the name.
 	QueueUID string
 
-	// Mode is how the deletion should proceed.
 	Mode QueueDeleteMode
 }
 
@@ -631,10 +613,7 @@ func DataSourceReadSeeker(rs io.ReadSeeker) DataSource {
 
 // SendRequest describes a message to append to a queue.
 type SendRequest struct {
-	// Spool is the spool the queue is in.
 	Spool string
-
-	// Queue is the queue to append to.
 	Queue string
 
 	// DelaySeconds is an optional delay until the message becomes visible.
@@ -768,7 +747,6 @@ func (c *Client) Send(ctx context.Context, req SendRequest) (SendResult, error) 
 // AckAndSendRequest describes a delivery to ack and the message to append,
 // both in a single atomic operation.
 type AckAndSendRequest struct {
-	// Spool is the spool both queues are in.
 	Spool string
 
 	// Lease is the delivery to ack. It names the queue it came from.
@@ -899,10 +877,7 @@ func (c *Client) AckAndSend(ctx context.Context, req AckAndSendRequest) (AckAndS
 
 // RecvRequest describes a queue to receive from and how long to wait.
 type RecvRequest struct {
-	// Spool is the spool the queue is in.
 	Spool string
-
-	// Queue is the queue to receive from.
 	Queue string
 
 	// WaitSeconds is an optional bound on the long poll; a value of 0
@@ -927,7 +902,6 @@ type RecvResult struct {
 	// value that did not parse.
 	Retries int
 
-	// Lease is the lease on the delivery.
 	Lease Lease
 
 	// LeaseMeta is what is known about the lease beyond the token.
@@ -1061,10 +1035,7 @@ func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok 
 
 // RenewRequest describes a lease to renew.
 type RenewRequest struct {
-	// Spool is the spool the lease is in.
 	Spool string
-
-	// Lease is the lease to renew.
 	Lease Lease
 }
 
@@ -1114,10 +1085,7 @@ func (c *Client) Renew(ctx context.Context, req RenewRequest) (RenewResult, erro
 
 // AckRequest describes a delivery to ack.
 type AckRequest struct {
-	// Spool is the spool the lease is in.
 	Spool string
-
-	// Lease is the delivery to ack.
 	Lease Lease
 }
 
@@ -1148,10 +1116,7 @@ func (c *Client) Ack(ctx context.Context, req AckRequest) error {
 
 // NackRequest describes a delivery to nack.
 type NackRequest struct {
-	// Spool is the spool the lease is in.
 	Spool string
-
-	// Lease is the delivery to nack.
 	Lease Lease
 }
 
@@ -1183,10 +1148,7 @@ func (c *Client) Nack(ctx context.Context, req NackRequest) error {
 
 // ReleaseRequest describes a delivery to release.
 type ReleaseRequest struct {
-	// Spool is the spool the lease is in.
 	Spool string
-
-	// Lease is the delivery to release.
 	Lease Lease
 
 	// DelaySeconds is an optional delay until the message becomes visible
@@ -1227,10 +1189,7 @@ func (c *Client) Release(ctx context.Context, req ReleaseRequest) error {
 
 // FailRequest describes a delivery to fail.
 type FailRequest struct {
-	// Spool is the spool the lease is in.
 	Spool string
-
-	// Lease is the delivery to fail.
 	Lease Lease
 }
 
@@ -1262,11 +1221,10 @@ func (c *Client) Fail(ctx context.Context, req FailRequest) error {
 // DiscardRequest describes a message to discard, by exactly one of its
 // tokens.
 type DiscardRequest struct {
-	// Spool is the spool the message is in.
 	Spool string
 
-	// Lease is the delivery to discard, from a receive. Set exactly one of
-	// Lease and Handle.
+	// Lease is the delivery to discard, from a receive.
+	// Set exactly one of Lease and Handle.
 	Lease Lease
 
 	// Handle is the message to discard, from a send or a listing.
@@ -1305,7 +1263,6 @@ func (c *Client) Discard(ctx context.Context, req DiscardRequest) error {
 
 // InspectRequest describes a message to read, by its handle.
 type InspectRequest struct {
-	// Spool is the spool the message is in.
 	Spool string
 
 	// Handle is the message to read, from a listing or a send.
@@ -1323,7 +1280,6 @@ type InspectResult struct {
 	// No operation takes it.
 	ID string
 
-	// State is the state the message is in now.
 	State MessageState
 
 	// Retries is the redeliveries so far, or -1 when the server reported a
@@ -1391,7 +1347,6 @@ func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult
 
 // RecoverRequest describes a failed message to return to its queue.
 type RecoverRequest struct {
-	// Spool is the spool the message is in.
 	Spool string
 
 	// Handle is the failed message, from a listing.

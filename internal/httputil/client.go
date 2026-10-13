@@ -32,10 +32,8 @@ type Client struct {
 	// BaseURL is the required absolute URI to use as the base for requests.
 	BaseURL string
 
-	Codec Codecs
-
-	Header http.Header
-
+	Codec   Codecs
+	Header  http.Header
 	Backoff backoff.Strategy
 
 	// UserAgent names the calling software; sent as the User-Agent header.
@@ -274,8 +272,8 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 		res, err := c.http.Do(req)
 		if err != nil {
 			errs = append(errs, &TransportError{
-				Err:  err,
 				Sent: requestSent(err),
+				Err:  err,
 			})
 			retryAfter = 0
 			continue
@@ -370,14 +368,10 @@ func (e AttemptErrors) last() error {
 	return e[len(e)-1]
 }
 
-// BodyError is a successful response whose body could not be read or
-// decoded.
+// BodyError is a successful response whose body could not be read or decoded.
 type BodyError struct {
-	// Code is the response's status code.
-	Code int
-
-	// Err is the failure.
-	Err error
+	Code   int
+	Err    error
 }
 
 func (e *BodyError) Error() string {
@@ -390,12 +384,12 @@ func (e *BodyError) Unwrap() error {
 
 // TransportError is a request that got no response.
 type TransportError struct {
-	// Err is the failure.
-	Err error
-
-	// Sent reports whether the request may have reached the server. It is
-	// false only when the connection itself failed: a DNS lookup or a dial.
+	// Sent reports whether the request may have reached the server.
+	// It is false only when the connection itself failed: a DNS lookup or a
+	// dial.
 	Sent bool
+
+	Err error
 }
 
 func (e *TransportError) Error() string {
