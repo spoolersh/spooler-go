@@ -81,6 +81,17 @@ func TestRecv(t *testing.T) {
 					},
 				},
 			},
+			// The message was leased, so the lease comes back for the caller
+			// to settle, with what was read before the failure.
+			ok: true,
+			exp: RecvResult{
+				ID:    "1-1",
+				Lease: "lease-1",
+				LeaseMeta: LeaseMeta{
+					ExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+				},
+				Data: []byte("hel"),
+			},
 			expErr: ErrResultUnknown,
 		},
 		{

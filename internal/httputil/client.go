@@ -134,6 +134,14 @@ func (c *Client) Client() (*http.Client, error) {
 	return c.http, nil
 }
 
+// Do makes one call: r is sent with the client's headers and codecs, up to
+// r.Attempts times while r.Retry allows, with a backoff between attempts
+// that a Retry-After lengthens. A success decodes the body into r.Recv and
+// returns the response's code and headers; a failure returns AttemptErrors,
+// every attempt's error.
+//
+// On successful http response but failed body processing Do returns filled
+// Response and non-nil error.
 func (c *Client) Do(ctx context.Context, method string, r Request) (Response, error) {
 	var (
 		zero Response
@@ -290,8 +298,9 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 			}
 			if err != nil {
 				errs = append(errs, &BodyError{
-					Code: res.StatusCode,
-					Err:  err,
+					Code:   res.StatusCode,
+					Header: res.Header,
+					Err:    err,
 				})
 				return ret, errs
 			}
@@ -371,6 +380,7 @@ func (e AttemptErrors) last() error {
 // BodyError is a successful response whose body could not be read or decoded.
 type BodyError struct {
 	Code   int
+	Header http.Header
 	Err    error
 }
 

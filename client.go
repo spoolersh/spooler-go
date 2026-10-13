@@ -953,9 +953,13 @@ func (Lease) String() string { return redacted }
 // String returns a redacted form, never the token.
 func (Handle) String() string { return redacted }
 
-// Recv leases the next message of the queue. When none becomes visible
-// within the wait, Recv reports ok as false, with a zero result and no
-// error.
+// Recv leases the next message of the queue. When none becomes visible within
+// the wait, Recv reports ok as false, with a zero result and no error.
+//
+// When a message was leased but its payload could not be read, Recv returns
+// the result with the lease and ok as true, and the error: the lease is the
+// caller's to settle. Data then holds what was read before the failure, as
+// a Writer has already received it.
 func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok bool, err error) {
 	c.init()
 
@@ -997,29 +1001,17 @@ func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok 
 		},
 	})
 	if err != nil {
-		return msg, false, resultError(err)
+		if res.Code == http.StatusOK {
+			// Message was leased but its payload failed to be read.
+			// We still return the message metadata to let callers handle this.
+			msg = c.parseRecvResult(ctx, rt, buf, res)
+			ok = true
+		}
+		return msg, ok, resultError(err)
 	}
 	switch res.Code {
 	case http.StatusOK:
-		expiresAt, err := parseExpiresAt(res.Header)
-		if err != nil {
-			c.Trace.onMalformedResponse(ctx, rt, err)
-		}
-		retries, err := parseRetries(res.Header)
-		if err != nil {
-			c.Trace.onMalformedResponse(ctx, rt, err)
-		}
-		msg = RecvResult{
-			ID:      res.Header.Get(headerMessageID),
-			Retries: retries,
-			Lease:   Lease(res.Header.Get(headerLease)),
-			LeaseMeta: LeaseMeta{
-				ExpiresAt: expiresAt,
-			},
-		}
-		if buf != nil {
-			msg.Data = buf.Bytes()
-		}
+		msg = c.parseRecvResult(ctx, rt, buf, res)
 		return msg, true, nil
 
 	case http.StatusNoContent:
@@ -1031,6 +1023,34 @@ func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok 
 			res.Code,
 		))
 	}
+}
+
+func (c *Client) parseRecvResult(
+	ctx context.Context,
+	rt RequestTrace,
+	buf *bytes.Buffer,
+	res httputil.Response,
+) RecvResult {
+	expiresAt, err := parseExpiresAt(res.Header)
+	if err != nil {
+		c.Trace.onMalformedResponse(ctx, rt, err)
+	}
+	retries, err := parseRetries(res.Header)
+	if err != nil {
+		c.Trace.onMalformedResponse(ctx, rt, err)
+	}
+	r := RecvResult{
+		ID:      res.Header.Get(headerMessageID),
+		Retries: retries,
+		Lease:   Lease(res.Header.Get(headerLease)),
+		LeaseMeta: LeaseMeta{
+			ExpiresAt: expiresAt,
+		},
+	}
+	if buf != nil {
+		r.Data = buf.Bytes()
+	}
+	return r
 }
 
 // RenewRequest describes a lease to renew.
