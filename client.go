@@ -187,6 +187,44 @@ func (c *Client) do(ctx context.Context, rt RequestTrace, method string, req htt
 	return res, err
 }
 
+// dataStream is a payload handed back unread. It closes the transport's body
+// on EOF, so that a full read returns the connection without a Close. A
+// payload cut short reads as io.ErrUnexpectedEOF, as io.ReadFull reports
+// one; any other failure is the SDK's error.
+type dataStream struct {
+	body io.ReadCloser
+	once sync.Once
+	err  error
+}
+
+func (s *dataStream) Read(p []byte) (int, error) {
+	n, err := s.body.Read(p)
+	if err == nil {
+		return n, nil
+	}
+	s.close()
+	switch {
+	case errors.Is(err, io.EOF):
+		// The literal sentinels: io.ReadAll and its kin compare with ==.
+		return n, io.EOF
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return n, io.ErrUnexpectedEOF
+	default:
+		return n, resultError(err)
+	}
+}
+
+func (s *dataStream) Close() error {
+	s.close()
+	return s.err
+}
+
+func (s *dataStream) close() {
+	s.once.Do(func() {
+		s.err = resultError(s.body.Close())
+	})
+}
+
 // SpoolRequest describes a spool to read.
 type SpoolRequest struct {
 	Spool string
@@ -886,10 +924,13 @@ type RecvRequest struct {
 	// Zero means the server's default.
 	WaitSeconds *int
 
-	// Writer is an optional destination for the payload.
+	// Stream is an optional request to return the payload unread as
+	// [RecvResult.DataStream], for the caller to read.
 	//
-	// Zero buffers the payload and returns it in RecvResult.Data instead.
-	Writer io.Writer
+	// If set, Recv then returns as soon as the message is leased.
+	//
+	// Zero reads the payload into [RecvResult.Data].
+	Stream bool
 }
 
 // RecvResult is the outcome of a receive: the message and the lease on it.
@@ -907,11 +948,22 @@ type RecvResult struct {
 	// LeaseMeta is what is known about the lease beyond the token.
 	LeaseMeta LeaseMeta
 
-	// Data is the message payload.
-	//
-	// It is nil when [RecvRequest.Writer] was set. Otherwise, it is nil when
-	// the received message was previously sent without payload.
+	// Data is the message payload. It is nil when the request set Stream,
+	// and when the message was sent without one.
 	Data []byte
+
+	// DataStream is the unread payload stream, set when the request had
+	// Stream set (empty messages included).
+	//
+	// Reading is bounded by the receive's context. A payload cut short reads
+	// as [io.ErrUnexpectedEOF], and the lease stays the caller's to settle.
+	//
+	// Users must close it as soon as the data is read.
+	DataStream io.ReadCloser
+
+	// DataSize is the payload's size in bytes as the server declared it, or
+	// -1 when it did not.
+	DataSize int64
 }
 
 // LeaseMeta is what a receive or a renew reports about a lease.
@@ -958,8 +1010,7 @@ func (Handle) String() string { return redacted }
 //
 // When a message was leased but its payload could not be read, Recv returns
 // the result with the lease and ok as true, and the error: the lease is the
-// caller's to settle. Data then holds what was read before the failure, as
-// a Writer has already received it.
+// caller's to settle. Data then holds what was read before the failure.
 func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok bool, err error) {
 	c.init()
 
@@ -970,12 +1021,6 @@ func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok 
 		return msg, false, errQueueRequired
 	}
 
-	var buf *bytes.Buffer
-	dst := req.Writer
-	if dst == nil {
-		buf = bytes.NewBuffer(nil)
-		dst = buf
-	}
 	var query url.Values
 	if w := req.WaitSeconds; w != nil {
 		if *w < 0 {
@@ -985,35 +1030,41 @@ func (c *Client) Recv(ctx context.Context, req RecvRequest) (msg RecvResult, ok 
 		}
 		query = sliceMapSet(query, "waitSeconds", strconv.Itoa(*w))
 	}
+	rq := httputil.Request{
+		Attempts: c.attempts(),
+		Retry:    retry,
+		Path:     "/spools/" + req.Spool + "/queues/" + req.Queue + "/recv",
+		Query:    query,
+		Stream:   req.Stream,
+		Codec: httputil.Codecs{
+			Recv: httputil.StreamDecoder,
+		},
+	}
+	var buf *bytes.Buffer
+	if !rq.Stream {
+		buf = bytes.NewBuffer(nil)
+		rq.Recv = buf
+	}
 	rt := RequestTrace{
 		Op:    OpRecv,
 		Spool: req.Spool,
 		Queue: req.Queue,
 	}
-	res, err := c.do(ctx, rt, "POST", httputil.Request{
-		Attempts: c.attempts(),
-		Retry:    retry,
-		Path:     "/spools/" + req.Spool + "/queues/" + req.Queue + "/recv",
-		Query:    query,
-		Recv:     dst,
-		Codec: httputil.Codecs{
-			Recv: httputil.StreamDecoder,
-		},
-	})
+	res, err := c.do(ctx, rt, "POST", rq)
+	if res.Code == http.StatusOK {
+		// The message was leased, but its payload may have failed to be
+		// read. The message metadata is still returned, so that callers can
+		// settle the lease.
+		msg = c.parseRecvResult(ctx, rt, buf, res)
+		return msg, true, resultError(err)
+	}
 	if err != nil {
-		if res.Code == http.StatusOK {
-			// Message was leased but its payload failed to be read.
-			// We still return the message metadata to let callers handle this.
-			msg = c.parseRecvResult(ctx, rt, buf, res)
-			ok = true
-		}
-		return msg, ok, resultError(err)
+		return msg, false, resultError(err)
+	}
+	if res.Body != nil {
+		res.Body.Close()
 	}
 	switch res.Code {
-	case http.StatusOK:
-		msg = c.parseRecvResult(ctx, rt, buf, res)
-		return msg, true, nil
-
 	case http.StatusNoContent:
 		return msg, false, nil
 
@@ -1046,9 +1097,16 @@ func (c *Client) parseRecvResult(
 		LeaseMeta: LeaseMeta{
 			ExpiresAt: expiresAt,
 		},
+		DataSize: res.ContentLength,
 	}
-	if buf != nil {
+	switch {
+	case buf != nil:
 		r.Data = buf.Bytes()
+
+	case res.Body != nil:
+		r.DataStream = &dataStream{
+			body: res.Body,
+		}
 	}
 	return r
 }
@@ -1288,10 +1346,11 @@ type InspectRequest struct {
 	// Handle is the message to read, from a listing or a send.
 	Handle Handle
 
-	// Writer is an optional destination for the payload.
+	// Stream is an optional request to return the payload unread as
+	// [InspectResult.DataStream], for the caller to read.
 	//
-	// Zero buffers the payload and returns it in InspectResult.Data instead.
-	Writer io.Writer
+	// Zero reads the payload into [InspectResult.Data].
+	Stream bool
 }
 
 // InspectResult is the outcome of an inspect: the message as it is now.
@@ -1306,12 +1365,30 @@ type InspectResult struct {
 	// value that did not parse.
 	Retries int
 
-	// Data is the payload, or nil when the request named a Writer.
+	// Data is the payload. It is nil when the request set Stream, and when
+	// the message was sent without one.
 	Data []byte
+
+	// DataStream is the unread payload stream, set when the request had
+	// Stream set (empty messages included).
+	//
+	// Reading is bounded by the inspect's context. A payload cut short reads
+	// as [io.ErrUnexpectedEOF].
+	//
+	// Users must close it as soon as the data is read.
+	DataStream io.ReadCloser
+
+	// DataSize is the payload's size in bytes as the server declared it, or
+	// -1 when it did not.
+	DataSize int64
 }
 
 // Inspect reads the message the handle names without moving it; the handle
 // stays valid.
+//
+// When the message was read but its payload could not be, Inspect returns
+// the result and the error. Data then holds what was read before the
+// failure.
 func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult, error) {
 	c.init()
 	if req.Spool == "" {
@@ -1320,31 +1397,52 @@ func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult
 	if req.Handle == "" {
 		return zero[InspectResult](), errHandleRequired
 	}
-	var buf *bytes.Buffer
-	dst := req.Writer
-	if dst == nil {
-		buf = bytes.NewBuffer(nil)
-		dst = buf
-	}
 	rt := RequestTrace{
 		Op:    OpInspect,
 		Spool: req.Spool,
 	}
-	res, err := c.do(ctx, rt, "POST", httputil.Request{
+	rq := httputil.Request{
 		Attempts: c.attempts(),
 		Retry:    retry,
 		Path:     "/spools/" + req.Spool + "/inspect",
 		Header: http.Header{
 			headerHandle: {string(req.Handle)},
 		},
-		Recv: dst,
+		Stream: req.Stream,
 		Codec: httputil.Codecs{
 			Recv: httputil.StreamDecoder,
 		},
-	})
+	}
+	var buf *bytes.Buffer
+	if !req.Stream {
+		buf = bytes.NewBuffer(nil)
+		rq.Recv = buf
+	}
+	res, err := c.do(ctx, rt, "POST", rq)
+	if res.Code == http.StatusOK {
+		// The payload may have failed to be read. The message metadata is
+		// still returned, as a receive's is.
+		ret := c.parseInspectResult(ctx, rt, buf, res)
+		return ret, resultError(err)
+	}
 	if err != nil {
 		return zero[InspectResult](), resultError(err)
 	}
+	if res.Body != nil {
+		res.Body.Close()
+	}
+	return zero[InspectResult](), resultError(fmt.Errorf(
+		"unexpected success status: %d",
+		res.Code,
+	))
+}
+
+func (c *Client) parseInspectResult(
+	ctx context.Context,
+	rt RequestTrace,
+	buf *bytes.Buffer,
+	res httputil.Response,
+) InspectResult {
 	retries, err := parseRetries(res.Header)
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
@@ -1354,15 +1452,22 @@ func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
 	}
-	ret := InspectResult{
-		ID:      res.Header.Get(headerMessageID),
-		State:   state,
-		Retries: retries,
+	r := InspectResult{
+		ID:       res.Header.Get(headerMessageID),
+		State:    state,
+		Retries:  retries,
+		DataSize: res.ContentLength,
 	}
-	if buf != nil {
-		ret.Data = buf.Bytes()
+	switch {
+	case buf != nil:
+		r.Data = buf.Bytes()
+
+	case res.Body != nil:
+		r.DataStream = &dataStream{
+			body: res.Body,
+		}
 	}
-	return ret, nil
+	return r
 }
 
 // RecoverRequest describes a failed message to return to its queue.

@@ -164,7 +164,7 @@ is not repeated here. What follows is only the SDK's side of it.
   either is ever wanted, it is a separate package the caller applies
   explicitly to `[]byte` (`Data: p.Seal(...)`, `p.Open(msg.Data)`), never a
   Client switch: a sealed payload cannot be opened until its tag is read, so
-  a receive into a Writer would buffer or hand out unverified bytes, and a
+  a streamed receive would hand out unverified bytes, and a
   compressed send cannot know its length until it has finished, so a
   streaming send would buffer. Ciphers are the standard library's
   `cipher.AEAD` with a caller-supplied keyring; codecs are `compress/gzip`
@@ -277,8 +277,8 @@ addition:
 - A request field the caller may leave zero says so in its first sentence,
   as the standard library does ("Cancel is an optional channel",
   "ModifyResponse is an optional function"): "DelaySeconds is an optional
-  delay until the message becomes visible", "Writer is an optional
-  destination for the payload". A required field says what it names and
+  delay until the message becomes visible", "Stream is an optional
+  request to hand the payload back unread". A required field says what it names and
   nothing about being required; the request is refused without it.
 - A field's zero value is documented as the last line of its comment, as its
   own paragraph after a blank comment line, in a sentence starting with

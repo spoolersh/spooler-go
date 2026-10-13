@@ -131,6 +131,7 @@ func TestDo(t *testing.T) {
 
 		exp         Response
 		expRecv     string
+		expBody     string       // What the streamed body reads as, when Stream is set.
 		expStatus   *StatusError // Compared on Code, Body and Desc.
 		expErr      error        // Matched with errors.Is.
 		err         bool         // Presence only.
@@ -172,6 +173,58 @@ func TestDo(t *testing.T) {
 				},
 			},
 			expRecv: "result",
+		},
+		{
+			name:   "a stream hands the body back unread, asking for the codec's type",
+			method: "GET",
+			req: Request{
+				Path:   "/spools/a",
+				Stream: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/spools/a",
+						header: http.Header{
+							"Accept": {"text/plain"},
+						},
+					},
+					res: response{
+						status: 200,
+						body:   "result",
+					},
+				},
+			},
+			exp: Response{
+				Code: 200,
+			},
+			expBody: "result",
+		},
+		{
+			name:    "a stream without a receive codec asks for no type",
+			method:  "GET",
+			noCodec: true,
+			req: Request{
+				Path:   "/spools/a",
+				Stream: true,
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "GET",
+						url:    "https://api.test/v1/spools/a",
+					},
+					res: response{
+						status: 200,
+						body:   "raw",
+					},
+				},
+			},
+			exp: Response{
+				Code: 200,
+			},
+			expBody: "raw",
 		},
 		{
 			name:   "no path and no query use the base as is",
@@ -1095,11 +1148,33 @@ func TestDo(t *testing.T) {
 							err,
 						)
 					}
-					if diff := cmp.Diff(test.exp, act, cmpopts.EquateEmpty()); diff != "" {
+					ignore := cmpopts.IgnoreFields(Response{}, "Body")
+					if diff := cmp.Diff(test.exp, act, cmpopts.EquateEmpty(), ignore); diff != "" {
 						t.Errorf(
 							"response mismatch (-want +act):\n%s",
 							diff,
 						)
+					}
+					if test.req.Stream {
+						if act.Body == nil {
+							t.Fatalf("want a body; got nothing")
+						}
+						body, err := io.ReadAll(act.Body)
+						if err != nil {
+							t.Fatalf(
+								"read body: %v",
+								err,
+							)
+						}
+						act.Body.Close()
+						if act, exp := string(body), test.expBody; act != exp {
+							t.Errorf(
+								"body: %q; want %q",
+								act, exp,
+							)
+						}
+					} else if act.Body != nil {
+						t.Errorf("want no body; got one")
 					}
 				}
 				if act, exp := recv, test.expRecv; act != exp {

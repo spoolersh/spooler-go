@@ -304,10 +304,11 @@ func TestClientServerMisbehaves(t *testing.T) {
 			t.Fatalf("want a message; got nothing")
 		}
 		exp := RecvResult{
-			ID:      "1-1",
-			Retries: -1,
-			Lease:   "lease-1",
-			Data:    []byte("hello"),
+			ID:       "1-1",
+			Retries:  -1,
+			Lease:    "lease-1",
+			Data:     []byte("hello"),
+			DataSize: 5,
 		}
 		if diff := cmp.Diff(exp, msg); diff != "" {
 			t.Errorf(

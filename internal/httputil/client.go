@@ -104,6 +104,10 @@ type Request struct {
 
 	Recv any
 
+	// Stream hands a successful response's body back unread, open, as
+	// Response.Body, for the caller to read and close; Recv is then unused.
+	Stream bool
+
 	// Attempts is the maximum total number of request attempts. Values < 1 are
 	// treated as 1, i.e. no retries.
 	Attempts int
@@ -125,6 +129,14 @@ type Request struct {
 type Response struct {
 	Code   int
 	Header http.Header
+
+	// ContentLength is the body's length as the response declared it, or
+	// -1 when it did not.
+	ContentLength int64
+
+	// Body is the response body, open, when the request set Stream; the
+	// caller closes it.
+	Body io.ReadCloser
 }
 
 func (c *Client) Client() (*http.Client, error) {
@@ -259,7 +271,9 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 			req.Header.Set("Content-Type", codec.Send.MediaType())
 			req.ContentLength = codecBody.Size()
 		}
-		if r.Recv != nil {
+		// A decode needs a codec and was checked above; a stream does not,
+		// and states a preference only when there is one.
+		if codec.Recv != nil && (r.Recv != nil || r.Stream) {
 			req.Header.Set("Accept", codec.Recv.MediaType())
 		}
 		for k, vs := range c.Header {
@@ -287,15 +301,20 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 			continue
 		}
 		if httpSuccess(res.StatusCode) {
+			ret := Response{
+				Code:          res.StatusCode,
+				Header:        res.Header,
+				ContentLength: res.ContentLength,
+			}
+			if r.Stream {
+				ret.Body = res.Body
+				return ret, nil
+			}
 			var err error
 			if r.Recv != nil && hasBody(method, res) {
 				err = codec.Recv.Decode(r.Recv, res.Body)
 			}
 			res.Body.Close()
-			ret := Response{
-				Code:   res.StatusCode,
-				Header: res.Header,
-			}
 			if err != nil {
 				errs = append(errs, &BodyError{
 					Code:   res.StatusCode,

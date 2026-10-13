@@ -43,6 +43,7 @@ type response struct {
 	header  http.Header
 	body    string
 	bodyErr error // Fails the body read after body, when set.
+	size    int64 // The declared length when set; -1 for none. Zero is len(body).
 	err     error
 }
 
@@ -291,14 +292,19 @@ func reply(r *http.Request, x response) (*http.Response, error) {
 	if x.bodyErr != nil {
 		body = io.MultiReader(body, iotest.ErrReader(x.bodyErr))
 	}
+	size := int64(len(x.body))
+	if x.size != 0 {
+		size = x.size
+	}
 	return &http.Response{
-		Status:     http.StatusText(x.status),
-		StatusCode: x.status,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     header,
-		Body:       io.NopCloser(body),
-		Request:    r,
+		Status:        http.StatusText(x.status),
+		StatusCode:    x.status,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        header,
+		ContentLength: size,
+		Body:          io.NopCloser(body),
+		Request:       r,
 	}, nil
 }
