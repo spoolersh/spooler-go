@@ -156,6 +156,7 @@ func invalidRequest(msg string) error {
 }
 
 var (
+	errAPIKeyRequired    = invalidRequest("api key is required")
 	errSpoolRequired     = invalidRequest("spool name is required")
 	errQueueRequired     = invalidRequest("queue name is required")
 	errDataAndDataSource = invalidRequest("either Data or DataSource is required, not both")

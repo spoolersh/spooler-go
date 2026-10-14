@@ -48,8 +48,8 @@ const (
 // Every operation retries the conditions the API documents as transient, up to
 // [Client.Attempts] or [DefaultAttempts].
 //
-// The zero value is ready to use, although for production API the
-// [Client.APIKey] is required.
+// An operation on a Client without [Client.APIKey] set is refused with
+// [ErrInvalidRequest] before any request is made.
 type Client struct {
 	// Trace is an optional set of runtime hooks the client calls.
 	Trace ClientTrace
@@ -60,6 +60,7 @@ type Client struct {
 	Host string
 
 	// APIKey authenticates every request made by this Client.
+	// Required.
 	APIKey string
 
 	// Attempts is how many times at most an operation is tried before its
@@ -85,8 +86,9 @@ type Client struct {
 	// the transport never leaves the package.
 	transport http.RoundTripper
 
-	once sync.Once
-	http *httputil.Client
+	once    sync.Once
+	initErr error
+	http    *httputil.Client
 }
 
 // Clone returns a copy of c with its settings and none of its connections;
@@ -104,8 +106,14 @@ func (c *Client) Clone() *Client {
 	}
 }
 
-func (c *Client) init() {
+func (c *Client) init() error {
 	c.once.Do(func() {
+		if c.APIKey == "" {
+			// NOTE: "Bearer " is not a valid Bearer credential as per RFC
+			// 6750, the token needs to be at least one character.
+			c.initErr = errAPIKeyRequired
+			return
+		}
 		scheme := "https"
 		if c.InsecureDisableTLS {
 			scheme = "http"
@@ -153,6 +161,7 @@ func (c *Client) init() {
 			},
 		}
 	})
+	return c.initErr
 }
 
 func (c *Client) attempts() int {
@@ -257,7 +266,9 @@ type SpoolRequest struct {
 // Spool reads a spool: its queue count and its message counts summed across
 // every queue.
 func (c *Client) Spool(ctx context.Context, req SpoolRequest) (Spool, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[Spool](), err
+	}
 	if req.Spool == "" {
 		return zero[Spool](), errSpoolRequired
 	}
@@ -303,7 +314,9 @@ type QueuesRequest struct {
 // Queues lists one page of a spool's queues, each with its settings and its
 // message counts.
 func (c *Client) Queues(ctx context.Context, req QueuesRequest) (Page[Queue], error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[Page[Queue]](), err
+	}
 	if req.Spool == "" {
 		return zero[Page[Queue]](), errSpoolRequired
 	}
@@ -367,7 +380,9 @@ type MessagesRequest struct {
 
 // Messages lists one page of a queue's messages, without their payloads.
 func (c *Client) Messages(ctx context.Context, req MessagesRequest) (Page[Message], error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[Page[Message]](), err
+	}
 	if req.Spool == "" {
 		return zero[Page[Message]](), errSpoolRequired
 	}
@@ -441,7 +456,9 @@ type CreateQueueRequest struct {
 //		// Handle error.
 //	}
 func (c *Client) CreateQueue(ctx context.Context, req CreateQueueRequest) (Queue, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[Queue](), err
+	}
 	if req.Spool == "" {
 		return zero[Queue](), errSpoolRequired
 	}
@@ -475,7 +492,9 @@ type QueueRequest struct {
 
 // Queue reads a queue: its state, its settings and its message counts.
 func (c *Client) Queue(ctx context.Context, req QueueRequest) (Queue, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[Queue](), err
+	}
 	if req.Spool == "" {
 		return zero[Queue](), errSpoolRequired
 	}
@@ -519,7 +538,9 @@ type UpdateQueueRequest struct {
 
 // UpdateQueue updates queue settings.
 func (c *Client) UpdateQueue(ctx context.Context, req UpdateQueueRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -565,7 +586,9 @@ type DeleteQueueRequest struct {
 // the deletion is accepted, not completed: the queue reports
 // [QueueStateDeleting] or [QueueStateDraining] until it is gone.
 func (c *Client) DeleteQueue(ctx context.Context, req DeleteQueueRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -744,7 +767,9 @@ func dedupHeader(d Dedup) (name, value string, ok bool) {
 // Message becomes visible to receivers at once, or if set after the request's
 // delay.
 func (c *Client) Send(ctx context.Context, req SendRequest) (SendResult, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[SendResult](), err
+	}
 
 	if req.Spool == "" {
 		return zero[SendResult](), errSpoolRequired
@@ -871,7 +896,9 @@ type AckAndSendResult struct {
 // Unlike [Client.Send], a retry needs no dedup key: a retry of a call that
 // committed fails with [ErrStaleToken] and appends nothing.
 func (c *Client) AckAndSend(ctx context.Context, req AckAndSendRequest) (AckAndSendResult, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[AckAndSendResult](), err
+	}
 	if req.Spool == "" {
 		return zero[AckAndSendResult](), errSpoolRequired
 	}
@@ -1039,7 +1066,9 @@ func (Handle) String() string { return redacted }
 // the result with the lease and ok as true, and the error: the lease is the
 // caller's to settle. Data then holds what was read before the failure.
 func (c *Client) Recv(ctx context.Context, req RecvRequest) (ret RecvResult, ok bool, err error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[RecvResult](), false, err
+	}
 
 	if req.Spool == "" {
 		return ret, false, errSpoolRequired
@@ -1138,7 +1167,9 @@ type RenewResult struct {
 // Renew resets the lease's expiry and reports the new one. The token stays
 // the same.
 func (c *Client) Renew(ctx context.Context, req RenewRequest) (RenewResult, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[RenewResult](), err
+	}
 
 	if req.Spool == "" {
 		return zero[RenewResult](), errSpoolRequired
@@ -1181,7 +1212,9 @@ type AckRequest struct {
 
 // Ack acks the delivery: the message is removed.
 func (c *Client) Ack(ctx context.Context, req AckRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -1213,7 +1246,9 @@ type NackRequest struct {
 // Nack returns the message for redelivery, counting a retry. Past the queue's
 // max retries the message is failed instead.
 func (c *Client) Nack(ctx context.Context, req NackRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -1251,7 +1286,9 @@ type ReleaseRequest struct {
 // Release returns the message for redelivery without counting a retry,
 // after the request's delay if any.
 func (c *Client) Release(ctx context.Context, req ReleaseRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -1285,7 +1322,9 @@ type FailRequest struct {
 
 // Fail marks the message failed.
 func (c *Client) Fail(ctx context.Context, req FailRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -1323,7 +1362,9 @@ type DiscardRequest struct {
 
 // Discard drops the message, by its lease or its handle, exactly one.
 func (c *Client) Discard(ctx context.Context, req DiscardRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 	if req.Spool == "" {
 		return errSpoolRequired
 	}
@@ -1405,7 +1446,9 @@ type InspectResult struct {
 // the result and the error. Data then holds what was read before the
 // failure.
 func (c *Client) Inspect(ctx context.Context, req InspectRequest) (InspectResult, error) {
-	c.init()
+	if err := c.init(); err != nil {
+		return zero[InspectResult](), err
+	}
 	if req.Spool == "" {
 		return zero[InspectResult](), errSpoolRequired
 	}
@@ -1519,7 +1562,9 @@ type RecoverRequest struct {
 // Recover returns a failed message to its queue, after the request's delay
 // if any.
 func (c *Client) Recover(ctx context.Context, req RecoverRequest) error {
-	c.init()
+	if err := c.init(); err != nil {
+		return err
+	}
 
 	if req.Spool == "" {
 		return errSpoolRequired
