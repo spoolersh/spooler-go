@@ -477,6 +477,15 @@ func (s *MessageState) fromWire(w string) error { return fromWire(messageState4w
 // for a value the SDK does not define.
 func (s MessageState) String() string { return enumString("MessageState", messageState2wire, s) }
 
+// ParseMessageState returns the state named s, as the API spells it.
+func ParseMessageState(s string) (MessageState, error) {
+	var state MessageState
+	if err := state.fromWire(s); err != nil {
+		return MessageStateUnknown, fmt.Errorf("unknown message state %q", s)
+	}
+	return state, nil
+}
+
 type messageState MessageState
 
 func (q *messageState) UnmarshalJSON(p []byte) error {
