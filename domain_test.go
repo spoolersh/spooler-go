@@ -249,6 +249,104 @@ func TestToWire(t *testing.T) {
 	}
 }
 
+func TestParseMessageState(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		str  string
+		exp  MessageState
+		err  bool
+	}{
+		{
+			name: "visible",
+			str:  "visible",
+			exp:  MessageStateVisible,
+		},
+		{
+			name: "failed",
+			str:  "failed",
+			exp:  MessageStateFailed,
+		},
+		{
+			name: "wrong case",
+			str:  "Visible",
+			err:  true,
+		},
+		{
+			name: "empty",
+			str:  "",
+			err:  true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			act, err := ParseMessageState(test.str)
+			if test.err && err == nil {
+				t.Errorf("want error; got nothing")
+			}
+			if !test.err && err != nil {
+				t.Errorf(
+					"unexpected error: %v",
+					err,
+				)
+			}
+			if act, exp := act, test.exp; act != exp {
+				t.Errorf(
+					"state: %v; want %v",
+					act, exp,
+				)
+			}
+		})
+	}
+}
+
+func TestParseQueueDeleteMode(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		str  string
+		exp  QueueDeleteMode
+		err  bool
+	}{
+		{
+			name: "force",
+			str:  "force",
+			exp:  QueueDeleteModeForce,
+		},
+		{
+			name: "drain",
+			str:  "drain",
+			exp:  QueueDeleteModeDrain,
+		},
+		{
+			name: "wrong case",
+			str:  "Force",
+			err:  true,
+		},
+		{
+			name: "empty",
+			str:  "",
+			err:  true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			act, err := ParseQueueDeleteMode(test.str)
+			if test.err && err == nil {
+				t.Errorf("want error; got nothing")
+			}
+			if !test.err && err != nil {
+				t.Errorf(
+					"unexpected error: %v",
+					err,
+				)
+			}
+			if act, exp := act, test.exp; act != exp {
+				t.Errorf(
+					"mode: %v; want %v",
+					act, exp,
+				)
+			}
+		})
+	}
+}
+
 // TestFromJSON covers the wire-to-enum direction through the JSON twins,
 // including what each does with a value it does not know: a state fails
 // the read, while a spool limit degrades to unknown so the rest of the

@@ -301,6 +301,15 @@ func (q QueueDeleteMode) String() string {
 	return enumString("QueueDeleteMode", queueDeleteMode2wire, q)
 }
 
+// ParseQueueDeleteMode returns the mode named s, as the API spells it.
+func ParseQueueDeleteMode(s string) (QueueDeleteMode, error) {
+	var mode QueueDeleteMode
+	if err := mode.fromWire(s); err != nil {
+		return QueueDeleteModeUnknown, fmt.Errorf("unknown queue delete mode %q", s)
+	}
+	return mode, nil
+}
+
 // QueueState is the state a queue is in.
 type QueueState uint
 
