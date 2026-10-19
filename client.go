@@ -27,17 +27,20 @@ const DefaultHost = "api.spooler.sh"
 const DefaultAttempts = 5
 
 const (
-	headerAuthorization  = "Authorization"
-	headerDedupHash      = "Spooler-Dedup-Hash"
-	headerDedupString    = "Spooler-Dedup-String"
-	headerDelay          = "Spooler-Delay-Seconds"
-	headerHandle         = "Spooler-Handle"
-	headerLease          = "Spooler-Lease"
-	headerLeaseExpiresAt = "Spooler-Lease-Expires-At"
-	headerMessageID      = "Spooler-Message-Id"
-	headerMessageRetries = "Spooler-Message-Retries"
-	headerMessageState   = "Spooler-Message-State"
-	headerQueue          = "Spooler-Queue"
+	headerAuthorization    = "Authorization"
+	headerDedupHash        = "Spooler-Dedup-Hash"
+	headerDedupString      = "Spooler-Dedup-String"
+	headerDelay            = "Spooler-Delay-Seconds"
+	headerHandle           = "Spooler-Handle"
+	headerLease            = "Spooler-Lease"
+	headerLeaseExpiresAt   = "Spooler-Lease-Expires-At"
+	headerMessageCreatedAt = "Spooler-Message-Created-At"
+	headerMessageExpiresAt = "Spooler-Message-Expires-At"
+	headerMessageID        = "Spooler-Message-Id"
+	headerMessageRetries   = "Spooler-Message-Retries"
+	headerMessageState     = "Spooler-Message-State"
+	headerMessageVisibleAt = "Spooler-Message-Visible-At"
+	headerQueue            = "Spooler-Queue"
 )
 
 // Client implements Spooler API spec.
@@ -1002,10 +1005,15 @@ type RecvResult struct {
 	// value that did not parse.
 	Retries int
 
+	// CreatedAt is when the message was sent.
+	CreatedAt time.Time
+
 	Lease Lease
 
-	// LeaseMeta is what is known about the lease beyond the token.
-	LeaseMeta LeaseMeta
+	// LeaseExpiresAt is when the lease expires.
+	//
+	// Zero means the lease never expires.
+	LeaseExpiresAt time.Time
 
 	// Data is the message payload. It is nil when the request set Stream,
 	// and when the message was sent without one.
@@ -1023,22 +1031,6 @@ type RecvResult struct {
 	// DataSize is the payload's size in bytes as the server declared it, or
 	// -1 when it did not.
 	DataSize int64
-}
-
-// LeaseMeta is what a receive or a renew reports about a lease.
-type LeaseMeta struct {
-	// ExpiresAt is when the lease expires.
-	//
-	// Zero means the lease never expires.
-	ExpiresAt time.Time
-}
-
-// Expires reports when the lease expires; ok is false when it never does.
-func (m LeaseMeta) Expires() (t time.Time, ok bool) {
-	if m.ExpiresAt.IsZero() {
-		return t, false
-	}
-	return m.ExpiresAt, true
 }
 
 // Lease is exclusive ownership of one delivery, from a receive.
@@ -1138,7 +1130,7 @@ func (c *Client) parseRecvResult(
 	rt RequestTrace,
 	res httputil.Response,
 ) RecvResult {
-	expiresAt, err := parseExpiresAt(res.Header)
+	expiresAt, err := parseTimeHeader(res.Header, headerLeaseExpiresAt)
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
 	}
@@ -1146,14 +1138,17 @@ func (c *Client) parseRecvResult(
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
 	}
+	createdAt, err := parseTimeHeader(res.Header, headerMessageCreatedAt)
+	if err != nil {
+		c.Trace.onMalformedResponse(ctx, rt, err)
+	}
 	return RecvResult{
-		ID:      res.Header.Get(headerMessageID),
-		Retries: retries,
-		Lease:   Lease(res.Header.Get(headerLease)),
-		LeaseMeta: LeaseMeta{
-			ExpiresAt: expiresAt,
-		},
-		DataSize: res.ContentLength,
+		ID:             res.Header.Get(headerMessageID),
+		Retries:        retries,
+		CreatedAt:      createdAt,
+		Lease:          Lease(res.Header.Get(headerLease)),
+		LeaseExpiresAt: expiresAt,
+		DataSize:       res.ContentLength,
 	}
 }
 
@@ -1165,8 +1160,10 @@ type RenewRequest struct {
 
 // RenewResult is the outcome of a renew.
 type RenewResult struct {
-	// LeaseMeta carries the new expiry.
-	LeaseMeta LeaseMeta
+	// LeaseExpiresAt is the new expiry.
+	//
+	// Zero means the lease never expires.
+	LeaseExpiresAt time.Time
 }
 
 // Renew resets the lease's expiry and reports the new one. The token stays
@@ -1198,14 +1195,12 @@ func (c *Client) Renew(ctx context.Context, req RenewRequest) (RenewResult, erro
 	if err != nil {
 		return zero[RenewResult](), resultError(err)
 	}
-	expiresAt, err := parseExpiresAt(res.Header)
+	expiresAt, err := parseTimeHeader(res.Header, headerLeaseExpiresAt)
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
 	}
 	return RenewResult{
-		LeaseMeta: LeaseMeta{
-			ExpiresAt: expiresAt,
-		},
+		LeaseExpiresAt: expiresAt,
 	}, nil
 }
 
@@ -1426,6 +1421,24 @@ type InspectResult struct {
 	// value that did not parse.
 	Retries int
 
+	// CreatedAt is when the message was sent.
+	CreatedAt time.Time
+
+	// VisibleAt is when a delayed message becomes visible.
+	//
+	// Zero means the message is not delayed.
+	VisibleAt time.Time
+
+	// LeaseExpiresAt is when the current lease expires.
+	//
+	// Zero means no lease, or one that never expires.
+	LeaseExpiresAt time.Time
+
+	// ExpiresAt is when retention discards the message.
+	//
+	// Zero means retention is off.
+	ExpiresAt time.Time
+
 	// Data is the payload. It is nil when the request set Stream, and when
 	// the message was sent without one.
 	Data []byte
@@ -1542,12 +1555,40 @@ func (c *Client) parseInspectResult(
 	if err != nil {
 		c.Trace.onMalformedResponse(ctx, rt, err)
 	}
-	return InspectResult{
+	ret := InspectResult{
 		ID:       res.Header.Get(headerMessageID),
 		State:    state,
 		Retries:  retries,
 		DataSize: res.ContentLength,
 	}
+	for _, h := range []struct {
+		name string
+		dst  *time.Time
+	}{
+		{
+			name: headerMessageCreatedAt,
+			dst:  &ret.CreatedAt,
+		},
+		{
+			name: headerMessageVisibleAt,
+			dst:  &ret.VisibleAt,
+		},
+		{
+			name: headerLeaseExpiresAt,
+			dst:  &ret.LeaseExpiresAt,
+		},
+		{
+			name: headerMessageExpiresAt,
+			dst:  &ret.ExpiresAt,
+		},
+	} {
+		t, err := parseTimeHeader(res.Header, h.name)
+		if err != nil {
+			c.Trace.onMalformedResponse(ctx, rt, err)
+		}
+		*h.dst = t
+	}
+	return ret
 }
 
 // RecoverRequest describes a failed message to return to its queue.
@@ -1708,16 +1749,16 @@ func zero[T any](...T) (_ T) {
 	return
 }
 
-// parseExpiresAt reads the lease expiry header. Absent is the zero time; an
-// error names the header, for the malformed-response hook.
-func parseExpiresAt(h http.Header) (t time.Time, err error) {
-	str := h.Get(headerLeaseExpiresAt)
+// parseTimeHeader reads an RFC 3339 header. Absent is the zero time.
+// An error names the header it tried to parse and wraps the error.
+func parseTimeHeader(h http.Header, name string) (t time.Time, err error) {
+	str := h.Get(name)
 	if str == "" {
 		return t, nil
 	}
 	t, err = time.Parse(time.RFC3339, str)
 	if err != nil {
-		return t, fmt.Errorf("%s: %w", headerLeaseExpiresAt, err)
+		return t, fmt.Errorf("%s: %w", name, err)
 	}
 	return t, nil
 }

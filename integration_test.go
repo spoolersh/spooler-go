@@ -773,8 +773,8 @@ func TestIntegrationLeaseExpiry(t *testing.T) {
 		Data: []byte("slow"),
 	})
 	msg := mustRecv(t, c, queue)
-	expires, ok := msg.LeaseMeta.Expires()
-	if !ok {
+	expires := msg.LeaseExpiresAt
+	if expires.IsZero() {
 		t.Fatalf("want an expiry; got none")
 	}
 
@@ -789,7 +789,7 @@ func TestIntegrationLeaseExpiry(t *testing.T) {
 			err,
 		)
 	}
-	if again, ok := renewed.LeaseMeta.Expires(); !ok || again.Before(expires) {
+	if again := renewed.LeaseExpiresAt; again.IsZero() || again.Before(expires) {
 		t.Errorf(
 			"renewed expiry: %v; want at or after %v",
 			again, expires,

@@ -519,9 +519,7 @@ func TestRenew(t *testing.T) {
 				},
 			},
 			exp: RenewResult{
-				LeaseMeta: LeaseMeta{
-					ExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-				},
+				LeaseExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 			},
 		},
 		{

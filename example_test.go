@@ -76,7 +76,7 @@ func ExampleClient_Renew() {
 	if err != nil || !ok {
 		return
 	}
-	if _, expires := msg.LeaseMeta.Expires(); !expires {
+	if msg.LeaseExpiresAt.IsZero() {
 		// The queue has no lease timeout: nothing to renew.
 		return
 	}

@@ -7,46 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	"time"
 )
-
-func TestLeaseMetaExpires(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		meta LeaseMeta
-		exp  time.Time
-		ok   bool
-	}{
-		{
-			name: "no lease timeout",
-			meta: LeaseMeta{},
-		},
-		{
-			name: "an expiry",
-			meta: LeaseMeta{
-				ExpiresAt: testCreatedAt,
-			},
-			exp: testCreatedAt,
-			ok:  true,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			act, ok := test.meta.Expires()
-			if act, exp := ok, test.ok; act != exp {
-				t.Errorf(
-					"ok: %t; want %t",
-					act, exp,
-				)
-			}
-			if act, exp := act, test.exp; !act.Equal(exp) {
-				t.Errorf(
-					"expiry: %v; want %v",
-					act, exp,
-				)
-			}
-		})
-	}
-}
 
 // TestEnumString covers every enum's String: a defined value prints as its
 // name, and one the SDK does not define prints as Type(value), the form the

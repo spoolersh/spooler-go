@@ -33,10 +33,11 @@ func TestRecv(t *testing.T) {
 					res: response{
 						status: 200,
 						header: http.Header{
-							"Spooler-Lease":            {"lease-1"},
-							"Spooler-Lease-Expires-At": {"2026-01-02T03:04:05Z"},
-							"Spooler-Message-Id":       {"1-1"},
-							"Spooler-Message-Retries":  {"2"},
+							"Spooler-Lease":              {"lease-1"},
+							"Spooler-Lease-Expires-At":   {"2026-01-02T03:04:05Z"},
+							"Spooler-Message-Id":         {"1-1"},
+							"Spooler-Message-Retries":    {"2"},
+							"Spooler-Message-Created-At": {"2026-01-02T03:00:00Z"},
 						},
 						body: "hello",
 					},
@@ -44,14 +45,13 @@ func TestRecv(t *testing.T) {
 			},
 			ok: true,
 			exp: RecvResult{
-				ID:      "1-1",
-				Retries: 2,
-				Lease:   "lease-1",
-				LeaseMeta: LeaseMeta{
-					ExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-				},
-				Data:     []byte("hello"),
-				DataSize: 5,
+				ID:             "1-1",
+				Retries:        2,
+				CreatedAt:      time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC),
+				Lease:          "lease-1",
+				LeaseExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+				Data:           []byte("hello"),
+				DataSize:       5,
 			},
 		},
 		{
@@ -87,13 +87,11 @@ func TestRecv(t *testing.T) {
 			// to settle, with what was read before the failure.
 			ok: true,
 			exp: RecvResult{
-				ID:    "1-1",
-				Lease: "lease-1",
-				LeaseMeta: LeaseMeta{
-					ExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-				},
-				Data:     []byte("hel"),
-				DataSize: 5,
+				ID:             "1-1",
+				Lease:          "lease-1",
+				LeaseExpiresAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+				Data:           []byte("hel"),
+				DataSize:       5,
 			},
 			expErr: ErrResultUnknown,
 		},
@@ -399,20 +397,101 @@ func TestInspect(t *testing.T) {
 					res: response{
 						status: 200,
 						header: http.Header{
-							"Spooler-Message-Id":      {"1-1"},
-							"Spooler-Message-State":   {"failed"},
-							"Spooler-Message-Retries": {"5"},
+							"Spooler-Message-Id":         {"1-1"},
+							"Spooler-Message-State":      {"failed"},
+							"Spooler-Message-Retries":    {"5"},
+							"Spooler-Message-Created-At": {"2026-10-19T12:00:00Z"},
+							"Spooler-Message-Expires-At": {"2026-10-20T12:00:00Z"},
 						},
 						body: "poison",
 					},
 				},
 			},
 			exp: InspectResult{
-				ID:       "1-1",
-				State:    MessageStateFailed,
-				Retries:  5,
-				Data:     []byte("poison"),
-				DataSize: 6,
+				ID:        "1-1",
+				State:     MessageStateFailed,
+				Retries:   5,
+				CreatedAt: time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC),
+				ExpiresAt: time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC),
+				Data:      []byte("poison"),
+				DataSize:  6,
+			},
+		},
+		{
+			name: "inspects a pending message",
+			req: InspectRequest{
+				Spool:  "default",
+				Handle: "handle-1",
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/inspect",
+						header: http.Header{
+							"Accept":         {"application/octet-stream"},
+							"Spooler-Handle": {"handle-1"},
+						},
+					},
+					res: response{
+						status: 200,
+						header: http.Header{
+							"Spooler-Message-Id":         {"1-1"},
+							"Spooler-Message-State":      {"pending"},
+							"Spooler-Message-Retries":    {"1"},
+							"Spooler-Message-Created-At": {"2026-10-19T12:00:00Z"},
+							"Spooler-Lease-Expires-At":   {"2026-10-19T12:01:30Z"},
+						},
+						body: "work",
+					},
+				},
+			},
+			exp: InspectResult{
+				ID:             "1-1",
+				State:          MessageStatePending,
+				Retries:        1,
+				CreatedAt:      time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC),
+				LeaseExpiresAt: time.Date(2026, 10, 19, 12, 1, 30, 0, time.UTC),
+				Data:           []byte("work"),
+				DataSize:       4,
+			},
+		},
+		{
+			name: "inspects a delayed message",
+			req: InspectRequest{
+				Spool:  "default",
+				Handle: "handle-1",
+			},
+			wire: []exchange{
+				{
+					req: request{
+						method: "POST",
+						path:   "/v1/spools/default/inspect",
+						header: http.Header{
+							"Accept":         {"application/octet-stream"},
+							"Spooler-Handle": {"handle-1"},
+						},
+					},
+					res: response{
+						status: 200,
+						header: http.Header{
+							"Spooler-Message-Id":         {"1-1"},
+							"Spooler-Message-State":      {"delayed"},
+							"Spooler-Message-Retries":    {"0"},
+							"Spooler-Message-Created-At": {"2026-10-19T12:00:00Z"},
+							"Spooler-Message-Visible-At": {"2026-10-19T12:05:00Z"},
+						},
+						body: "later",
+					},
+				},
+			},
+			exp: InspectResult{
+				ID:        "1-1",
+				State:     MessageStateDelayed,
+				CreatedAt: time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC),
+				VisibleAt: time.Date(2026, 10, 19, 12, 5, 0, 0, time.UTC),
+				Data:      []byte("later"),
+				DataSize:  5,
 			},
 		},
 		{
@@ -468,9 +547,10 @@ func TestInspect(t *testing.T) {
 					res: response{
 						status: 200,
 						header: http.Header{
-							"Spooler-Message-Id":      {"1-1"},
-							"Spooler-Message-State":   {"frozen"},
-							"Spooler-Message-Retries": {"many"},
+							"Spooler-Message-Id":         {"1-1"},
+							"Spooler-Message-State":      {"frozen"},
+							"Spooler-Message-Retries":    {"many"},
+							"Spooler-Message-Created-At": {"yesterday"},
 						},
 						body: "poison",
 					},
