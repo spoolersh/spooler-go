@@ -529,7 +529,7 @@ type UpdateQueueRequest struct {
 	// [ErrQueueReplaced], and nothing is changed.
 	//
 	// Zero updates whatever queue has the name.
-	QueueUID string
+	QueueUID *string
 
 	// Settings are the settings to replace.
 	// At least one Settings's field must be set.
@@ -548,8 +548,8 @@ func (c *Client) UpdateQueue(ctx context.Context, req UpdateQueueRequest) error 
 		return errQueueRequired
 	}
 	var query url.Values
-	if uid := req.QueueUID; uid != "" {
-		query = sliceMapSet(query, "uid", uid)
+	if uid := req.QueueUID; uid != nil {
+		query = sliceMapSet(query, "uid", *uid)
 	}
 	rt := RequestTrace{
 		Op:    OpUpdateQueue,
@@ -577,7 +577,7 @@ type DeleteQueueRequest struct {
 	// queue created under the name since.
 	//
 	// Zero deletes whatever queue has the name.
-	QueueUID string
+	QueueUID *string
 
 	Mode QueueDeleteMode
 }
@@ -604,8 +604,8 @@ func (c *Client) DeleteQueue(ctx context.Context, req DeleteQueueRequest) error 
 	query := url.Values{
 		"mode": []string{mode},
 	}
-	if uid := req.QueueUID; uid != "" {
-		query.Set("uid", uid)
+	if uid := req.QueueUID; uid != nil {
+		query.Set("uid", *uid)
 	}
 	rt := RequestTrace{
 		Op:    OpDeleteQueue,
@@ -764,7 +764,7 @@ func dedupHeader(d Dedup) (name, value string, ok bool) {
 	case dedupHash:
 		name = headerDedupHash
 	}
-	return name, d.key, d.key != ""
+	return name, d.key, d.kind != dedupNone
 }
 
 // Send appends a message to a queue.

@@ -286,22 +286,29 @@ addition:
   "Zero sends an empty message." The word is always "zero", never "nil", "empty" or "absent",
   whatever the type. Where a pointer field's pointed-to 0 means something
   else, that is said in the body as "a value of 0".
-- **A zero payload means absent, whatever carries it.** `QueueDeleteMode`
-  is a sum of values (an enum): 0 is no mode. `QueueUID` is one value: `""`
-  is no precondition and is not sent. `Dedup` is a sum of variants (a
-  union): its tag says which field the key would be on a flat request
-  (`DedupString` or `DedupHash`), its key is that field's value, and an
-  empty key is no key exactly as an empty `QueueUID` is, so
-  `DedupString("")` is the zero Dedup. A constructor on a value the caller
-  already holds in the right type only tags it: it checks nothing and
-  cannot fail, so it returns no error, where `Parse*` does because text may
-  name nothing. The zero check sits where the value is consumed, as it
-  would on a plain field. A field is a pointer only when the server gives
-  the payload's zero a meaning of its own: `WaitSeconds *int`, where a
-  value of 0 returns at once and nil is the server's default. A field never
-  carries a state the server only refuses; keeping an empty value out of a
-  request is the caller's job, and the one layer that can tell "given
-  empty" from "omitted" is a flag parser, not the SDK.
+- **An optional field's shape says whether the SDK may read a given zero
+  as absent.** A bare field is one whose zero the server reads as absence
+  too, so the SDK loses nothing by not sending it: `DelaySeconds int` (0
+  is immediate), `ReturnHandle bool`, `Limit int`, `After string` (the
+  first page). A pointer or a tagged union is used in two cases, and the
+  request never sends nil but sends everything else verbatim, empty
+  included:
+  - the server gives the zero payload a meaning of its own: `WaitSeconds
+    *int`, where a value of 0 returns at once and nil is the server's
+    default;
+  - reading an empty value as absent would widen a mutation or drop a
+    guarantee: `QueueUID *string` (absent deletes or updates whatever has
+    the name), `Dedup` (absent sends without dedup). A caller who wrote
+    `&uid` or `DedupString(key)` meant a value; when it is empty the
+    request goes out and the server refuses it, which is the only outcome
+    that matches no intent silently.
+
+  `Dedup`'s tag is which field the key would be on a flat request
+  (`DedupString` or `DedupHash`), and its key is that field's value; a
+  constructor only tags, checks nothing, and so returns no error, where
+  `Parse*` does because text may name nothing. Nothing in this rule adds a
+  local check: the SDK never decides whether a non-nil payload is valid,
+  per the validation bullet below.
 - In a struct declaration, a field that carries a doc comment is separated
   from the field before it by a blank line, so that the comment reads as
   the field's own and not as a trailer of the previous one. Fields without

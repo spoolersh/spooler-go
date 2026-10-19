@@ -499,7 +499,7 @@ func TestUpdateQueue(t *testing.T) {
 			req: UpdateQueueRequest{
 				Spool:    "default",
 				Queue:    "jobs",
-				QueueUID: "AAAAAAAAAAEAAAAB",
+				QueueUID: new("AAAAAAAAAAEAAAAB"),
 				Settings: QueueSettingsUpdate{
 					MaxRetries: new(9),
 				},
@@ -640,7 +640,7 @@ func TestDeleteQueue(t *testing.T) {
 			req: DeleteQueueRequest{
 				Spool:    "default",
 				Queue:    "jobs",
-				QueueUID: "AAAAAAAAAAEAAAAB",
+				QueueUID: new("AAAAAAAAAAEAAAAB"),
 				Mode:     QueueDeleteModeForce,
 			},
 			wire: []exchange{
@@ -664,7 +664,7 @@ func TestDeleteQueue(t *testing.T) {
 			req: DeleteQueueRequest{
 				Spool:    "default",
 				Queue:    "jobs",
-				QueueUID: "AAAAAAAAAAEAAAAB",
+				QueueUID: new("AAAAAAAAAAEAAAAB"),
 				Mode:     QueueDeleteModeForce,
 			},
 			wire: []exchange{
