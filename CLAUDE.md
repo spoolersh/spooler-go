@@ -286,6 +286,22 @@ addition:
   "Zero sends an empty message." The word is always "zero", never "nil", "empty" or "absent",
   whatever the type. Where a pointer field's pointed-to 0 means something
   else, that is said in the body as "a value of 0".
+- **A zero payload means absent, whatever carries it.** `QueueDeleteMode`
+  is a sum of values (an enum): 0 is no mode. `QueueUID` is one value: `""`
+  is no precondition and is not sent. `Dedup` is a sum of variants (a
+  union): its tag says which field the key would be on a flat request
+  (`DedupString` or `DedupHash`), its key is that field's value, and an
+  empty key is no key exactly as an empty `QueueUID` is, so
+  `DedupString("")` is the zero Dedup. A constructor on a value the caller
+  already holds in the right type only tags it: it checks nothing and
+  cannot fail, so it returns no error, where `Parse*` does because text may
+  name nothing. The zero check sits where the value is consumed, as it
+  would on a plain field. A field is a pointer only when the server gives
+  the payload's zero a meaning of its own: `WaitSeconds *int`, where a
+  value of 0 returns at once and nil is the server's default. A field never
+  carries a state the server only refuses; keeping an empty value out of a
+  request is the caller's job, and the one layer that can tell "given
+  empty" from "omitted" is a flag parser, not the SDK.
 - In a struct declaration, a field that carries a doc comment is separated
   from the field before it by a blank line, so that the comment reads as
   the field's own and not as a trailer of the previous one. Fields without

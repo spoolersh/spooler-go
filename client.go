@@ -626,19 +626,24 @@ func (c *Client) DeleteQueue(ctx context.Context, req DeleteQueueRequest) error 
 //
 // Zero means no dedup key.
 type Dedup struct {
-	str  string
-	hash string
+	kind dedupKind
+	key  string
 }
 
-// IsZero reports whether no key is set.
-func (d Dedup) IsZero() bool {
-	return d.str == "" && d.hash == ""
-}
+// dedupKind is which of the two constructors made a Dedup.
+type dedupKind uint
+
+const (
+	dedupNone dedupKind = iota
+	dedupString
+	dedupHash
+)
 
 // DedupString keys a send by a string; the server hashes it.
 func DedupString(str string) Dedup {
 	return Dedup{
-		str: str,
+		kind: dedupString,
+		key:  str,
 	}
 }
 
@@ -646,7 +651,8 @@ func DedupString(str string) Dedup {
 // recipe on https://docs.spooler.sh/dedup.
 func DedupHash(h string) Dedup {
 	return Dedup{
-		hash: h,
+		kind: dedupHash,
+		key:  h,
 	}
 }
 
@@ -752,14 +758,13 @@ type SendResult struct {
 }
 
 func dedupHeader(d Dedup) (name, value string, ok bool) {
-	switch {
-	case d.str != "":
-		return headerDedupString, d.str, true
-	case d.hash != "":
-		return headerDedupHash, d.hash, true
-	default:
-		return "", "", false
+	switch d.kind {
+	case dedupString:
+		name = headerDedupString
+	case dedupHash:
+		name = headerDedupHash
 	}
+	return name, d.key, d.key != ""
 }
 
 // Send appends a message to a queue.
