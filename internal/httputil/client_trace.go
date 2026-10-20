@@ -50,15 +50,15 @@ func LoggerRoundTripperTrace(logger *slog.Logger) RoundTripperTrace {
 
 // DumpRoundTripperTrace writes every request and response to w in wire form.
 //
-// The named headers are shown as REDACTED, in both directions, so that a
+// The named headers are shown as placeholder, in both directions, so that a
 // credential never lands in a log. The dump helpers consume and replace a
 // body, so they run on the real message with its headers swapped for the
 // duration of the dump.
-func DumpRoundTripperTrace(w io.Writer, redact ...string) RoundTripperTrace {
+func DumpRoundTripperTrace(w io.Writer, placeholder string, redact ...string) RoundTripperTrace {
 	return RoundTripperTrace{
 		OnRoundTrip: func(req *http.Request) func(*http.Response, error) {
 			orig := req.Header
-			req.Header = redactHeader(orig, redact)
+			req.Header = redactHeader(orig, placeholder, redact)
 			bts, _ := httputil.DumpRequestOut(req, true)
 			req.Header = orig
 			fmt.Fprintln(w, string(bts))
@@ -67,7 +67,7 @@ func DumpRoundTripperTrace(w io.Writer, redact ...string) RoundTripperTrace {
 					return
 				}
 				orig := res.Header
-				res.Header = redactHeader(orig, redact)
+				res.Header = redactHeader(orig, placeholder, redact)
 				bts, _ := httputil.DumpResponse(res, true)
 				res.Header = orig
 				fmt.Fprintln(w, string(bts))
@@ -76,12 +76,13 @@ func DumpRoundTripperTrace(w io.Writer, redact ...string) RoundTripperTrace {
 	}
 }
 
-// redactHeader returns a copy of h with the named headers' values replaced.
-func redactHeader(h http.Header, names []string) http.Header {
+// redactHeader returns a copy of h with the named headers' values replaced
+// by placeholder.
+func redactHeader(h http.Header, placeholder string, names []string) http.Header {
 	out := h.Clone()
 	for _, name := range names {
 		if _, has := out[http.CanonicalHeaderKey(name)]; has {
-			out.Set(name, "REDACTED")
+			out.Set(name, placeholder)
 		}
 	}
 	return out

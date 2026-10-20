@@ -36,9 +36,9 @@ func TestDumpRoundTripperTrace(t *testing.T) {
 			reqBody: "hello",
 			resBody: "world",
 			shown: []string{
-				"Authorization: REDACTED",
+				"Authorization: XXX",
 				"X-Plain: visible",
-				"Spooler-Lease: REDACTED",
+				"Spooler-Lease: XXX",
 				"X-Answer: yes",
 				"hello",
 				"world",
@@ -89,7 +89,7 @@ func TestDumpRoundTripperTrace(t *testing.T) {
 				c := &Client{
 					ClientBuilder: ClientBuilder{
 						Transport: rt,
-						Trace:     DumpRoundTripperTrace(&dump, test.redact...),
+						Trace:     DumpRoundTripperTrace(&dump, "XXX", test.redact...),
 					},
 					BaseURL: "https://api.test/v1",
 					Header:  test.reqHdr,

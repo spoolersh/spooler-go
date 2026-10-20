@@ -1,9 +1,12 @@
 package spooler
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"testing/synctest"
 
@@ -13,7 +16,6 @@ import (
 // clientConfig is the part of Client a test can hold and compare: Client
 // itself carries a sync.Once and must not be copied.
 type clientConfig struct {
-	Debug      bool
 	Host       string
 	DisableTLS bool
 	APIKey     string
@@ -21,7 +23,6 @@ type clientConfig struct {
 
 func (c clientConfig) client() *Client {
 	return &Client{
-		InsecureDebug:      c.Debug,
 		Host:               c.Host,
 		InsecureDisableTLS: c.DisableTLS,
 		APIKey:             c.APIKey,
@@ -99,7 +100,7 @@ func TestClientClone(t *testing.T) {
 			APIKey:             testKey,
 			Attempts:           3,
 			InsecureDisableTLS: true,
-			InsecureDebug:      false,
+			DebugWriter:        new(bytes.Buffer),
 		}
 		c.transport = &stubRoundTripper{
 			DoRoundTrip: func(r *http.Request) (*http.Response, error) {
@@ -163,7 +164,7 @@ type settings struct {
 	APIKey             string
 	Attempts           int
 	InsecureDisableTLS bool
-	InsecureDebug      bool
+	DebugWriter        io.Writer
 }
 
 func configOf(c *Client) settings {
@@ -172,8 +173,98 @@ func configOf(c *Client) settings {
 		APIKey:             c.APIKey,
 		Attempts:           c.Attempts,
 		InsecureDisableTLS: c.InsecureDisableTLS,
-		InsecureDebug:      c.InsecureDebug,
+		DebugWriter:        c.DebugWriter,
 	}
+}
+
+// TestClientDebugWriter checks that the dump of each request and response
+// reaches DebugWriter with the payload in full and the API key and lease
+// redacted, whichever side carries them.
+func TestClientDebugWriter(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var dump bytes.Buffer
+		c := &Client{
+			DebugWriter: &dump,
+		}
+		done := stubWire(t, c, []exchange{
+			{
+				req: request{
+					method: "POST",
+					path:   "/v1/spools/default/queues/jobs/recv",
+					header: http.Header{
+						"Accept": {"application/octet-stream"},
+					},
+				},
+				res: response{
+					status: 200,
+					header: http.Header{
+						"Spooler-Lease":      {"lease-1"},
+						"Spooler-Message-Id": {"1-1"},
+					},
+					body: "hello",
+				},
+			},
+			{
+				req: request{
+					method: "POST",
+					path:   "/v1/spools/default/ack",
+					header: http.Header{
+						"Spooler-Lease": {"lease-1"},
+					},
+				},
+				res: response{
+					status: 204,
+				},
+			},
+		})
+		msg, _, err := c.Recv(t.Context(), RecvRequest{
+			Spool: "default",
+			Queue: "jobs",
+		})
+		if err != nil {
+			t.Fatalf(
+				"unexpected error: %v",
+				err,
+			)
+		}
+		err = c.Ack(t.Context(), AckRequest{
+			Spool: "default",
+			Lease: msg.Lease,
+		})
+		done()
+		if err != nil {
+			t.Fatalf(
+				"unexpected error: %v",
+				err,
+			)
+		}
+		act := dump.String()
+		for _, exp := range []string{
+			"POST /v1/spools/default/queues/jobs/recv HTTP/1.1",
+			"HTTP/1.1 200 OK",
+			"POST /v1/spools/default/ack HTTP/1.1",
+			"HTTP/1.1 204 No Content",
+			"Authorization: [REDACTED]",
+			"Spooler-Lease: [REDACTED]",
+			"Spooler-Message-Id: 1-1",
+			"\r\n\r\nhello",
+		} {
+			if !strings.Contains(act, exp) {
+				t.Errorf(
+					"dump:\n%s\nwant it to contain %q",
+					act, exp,
+				)
+			}
+		}
+		for _, secret := range []string{testKey, "lease-1"} {
+			if strings.Contains(act, secret) {
+				t.Errorf(
+					"dump:\n%s\nwant it not to contain %q",
+					act, secret,
+				)
+			}
+		}
+	})
 }
 
 // TestClientSetup checks what the client's configuration becomes on the

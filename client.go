@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -82,9 +81,14 @@ type Client struct {
 	// so the API key travels in plain text. For testing only.
 	InsecureDisableTLS bool
 
-	// InsecureDebug dumps every request and response to standard error.
-	// For testing only.
-	InsecureDebug bool
+	// DebugWriter optionally specifies a destination for a dump of every
+	// request and response, payloads included. The API key, leases and handles
+	// are redacted. It must be safe for concurrent use, as [os.Stderr] is.
+	//
+	// For debugging only.
+	//
+	// Zero dumps nothing.
+	DebugWriter io.Writer
 
 	// transport replaces the network in tests. It is unexported on purpose:
 	// the transport never leaves the package.
@@ -105,7 +109,7 @@ func (c *Client) Clone() *Client {
 		APIKey:             c.APIKey,
 		Attempts:           c.Attempts,
 		InsecureDisableTLS: c.InsecureDisableTLS,
-		InsecureDebug:      c.InsecureDebug,
+		DebugWriter:        c.DebugWriter,
 		transport:          c.transport,
 	}
 }
@@ -133,8 +137,8 @@ func (c *Client) init() error {
 				OnConnect: c.Trace.onConnect,
 			},
 		}
-		if c.InsecureDebug {
-			b.Trace = b.Trace.Compose(httputil.DumpRoundTripperTrace(os.Stderr,
+		if c.DebugWriter != nil {
+			b.Trace = b.Trace.Compose(httputil.DumpRoundTripperTrace(c.DebugWriter, redacted,
 				headerAuthorization,
 				headerLease,
 				headerHandle,
@@ -1048,7 +1052,7 @@ type Handle string
 //
 // The SDK converts with string(...) where the value is presented back, and a
 // caller may do the same.
-const redacted = "REDACTED"
+const redacted = "[REDACTED]"
 
 // String returns a redacted form, never the token.
 func (Lease) String() string { return redacted }
