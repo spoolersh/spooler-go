@@ -14,10 +14,12 @@ import (
 )
 
 // Error is an error the API answered. Every operation returns one, wrapped,
-// for any answer that is an error; reach it with [errors.As], or match its
-// kind directly with [errors.Is] against the Err sentinels, as
-// errors.Is(err, [ErrQueueNotFound]). The message is for people; a program
-// acts on the kind, the details and RetryAfter.
+// for any answer that is an error.
+//
+// You can reach it with [errors.As], or match its kind directly with
+// [errors.Is] against the Err sentinels, as errors.Is(err, [ErrQueueNotFound]).
+// Its [error.Error] message is for a human only -- a program acts on the kind,
+// the details and RetryAfter.
 type Error struct {
 	// Kind is what went wrong, as the API names it. It is ErrorKindUnknown
 	// for an answer without a kind, such as one the API gives by status
@@ -41,15 +43,14 @@ type Error struct {
 	RetryAfter time.Duration
 }
 
-// Error returns the server's message, which is complete on its own and
-// already states what Details holds as fields; reach those with [errors.As].
-// Without a message it returns the details' text, and failing that the
-// kind's words.
+// Error returns the server's message, which is complete on its own and already
+// states what Details holds as fields. Without a message it returns the
+// details' text, and failing that the kind's words.
 func (e *Error) Error() string {
-	switch {
-	case e.Message != "":
+	if e.Message != "" {
 		return e.Message
-	case e.Details != nil:
+	}
+	if e.Details != nil {
 		return e.Details.Error()
 	}
 	if str, has := errorKind2string[e.Kind]; has {
@@ -74,8 +75,8 @@ func (e *Error) Unwrap() error {
 
 // ErrResultUnknown matches a failure that leaves the result unknown: an answer
 // the docs class as "may have changed", or no answer once the request may have
-// reached the server. For an operation that changes state, the change may
-// have happened anyway; what a retry then does depends on the operation, see
+// reached the server. For an operation that changes state, the change may have
+// happened anyway; what a retry then does depends on the operation, see
 // "Retrying a change" at https://docs.spooler.sh/errors.
 //
 // It describes this call, the retries [Client.Attempts] allows included: it
@@ -98,6 +99,12 @@ type clientError struct {
 func (e *clientError) Error() string {
 	var sb strings.Builder
 	sb.WriteString("spooler: ")
+	for _, c := range e.conds {
+		if c == ErrResultUnknown {
+			sb.WriteString(c.Error())
+			sb.WriteString(": ")
+		}
+	}
 	sb.WriteString(e.err.Error())
 	return sb.String()
 }
@@ -595,8 +602,9 @@ func httpError(err error) error {
 
 // statusCondition returns the sentinel of the condition the status of err's
 // last attempt signals when the answer names no kind this SDK knows, or nil.
-// Only a status a gateway can answer too gets one; every answer of the API
-// itself carries a kind.
+//
+// Today only a status a gateway can answer too gets one; every answer of the
+// API itself carries a kind.
 func statusCondition(err error) error {
 	se, ok := errors.AsType[*httputil.StatusError](err)
 	if !ok {

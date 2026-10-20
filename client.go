@@ -195,7 +195,6 @@ func (c *Client) doData(ctx context.Context, rt RequestTrace, method string, req
 }
 
 func rpcError(err error) error {
-	// Classified before httpError, which drops the status.
 	var conds []error
 	if cond := statusCondition(err); cond != nil {
 		conds = append(conds, cond)
@@ -1724,22 +1723,27 @@ func attemptUnknown(err error) bool {
 		switch {
 		case e.Code < 500:
 			return false
+
 		case
 			e.Code == http.StatusInsufficientStorage,
 			e.Code == http.StatusServiceUnavailable:
 
 			// The docs answer these before the change is attempted.
 			return false
+
 		default:
 			// Any other 5xx, an unlisted one included, may have changed:
 			// an unknown status is read by its class.
 			return true
 		}
+
 	case *httputil.TransportError:
 		return e.Sent
+
 	case *httputil.BodyError:
 		// The server answered with success; only the answer was lost.
 		return true
+
 	default:
 		return false
 	}
