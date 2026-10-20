@@ -6,25 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spoolersh/spooler-go/internal/httputil"
 )
 
-// Error is an error the API answered. Every operation returns one, wrapped,
-// for any answer that is an error.
+// Error is an error the API answered: an answer that names a kind, carries a
+// message, or both. Every operation returns one, wrapped, for such an answer.
+// An answer that does neither, such as a gateway's, is not the API's and is
+// returned as a plain error whose text is its status and body.
 //
 // You can reach it with [errors.As], or match its kind directly with
 // [errors.Is] against the Err sentinels, as errors.Is(err, [ErrQueueNotFound]).
-// Its [error.Error] message is for a human only -- a program acts on the kind,
-// the details and RetryAfter.
+// Its [error.Error] message is for a human only -- a program acts on the kind
+// and the details.
 type Error struct {
 	// Kind is what went wrong, as the API names it. It is ErrorKindUnknown
-	// for an answer without a kind, such as one the API gives by status
-	// alone, and for a kind this SDK does not know, whose wire name is then
-	// kept in the message.
+	// for an answer without a kind and for a kind this SDK does not know.
 	Kind ErrorKind
 
 	// Message is the server's text, complete on its own.
@@ -35,12 +34,6 @@ type Error struct {
 	//
 	// Zero means the kind has no details.
 	Details error
-
-	// RetryAfter is how long the server asked to wait before retrying, as
-	// of the last answer.
-	//
-	// Zero means the server did not say.
-	RetryAfter time.Duration
 }
 
 // Error returns the server's message, which is complete on its own and already
@@ -381,6 +374,17 @@ func (e *DedupClaimedError) Error() string {
 	return fmt.Sprintf("dedup claimed: %q", e.ID)
 }
 
+// RateLimitedError is the details of an [ErrorKindRateLimited] answer.
+type RateLimitedError struct {
+	// RetryAfter is how long the server asked to wait before retrying.
+	RetryAfter time.Duration
+}
+
+// Error returns the wait.
+func (e *RateLimitedError) Error() string {
+	return fmt.Sprintf("rate limited: retry after %s", e.RetryAfter)
+}
+
 // SpoolLimit is which of a spool's caps [SpoolFullError] reports reached.
 type SpoolLimit uint
 
@@ -423,65 +427,70 @@ func (e *SpoolFullError) Error() string {
 }
 
 // errorObj is the wire form of an error. Kind stays a string: one this SDK
-// does not know must not fail the decode, and its name is kept for the
-// message so that a caller can still see which kind arrived.
+// does not know must not fail the decode.
 type errorObj struct {
 	Kind    string          `json:"kind"`
 	Message string          `json:"message"`
 	Details json.RawMessage `json:"details"`
 }
 
-// kind is the kind the wire named, or ErrorKindUnknown.
-func (e *errorObj) kind() (k ErrorKind) {
+// toKind is the kind the wire named, or ErrorKindUnknown.
+func (e *errorObj) toKind() (k ErrorKind) {
 	_ = k.fromWire(e.Kind)
 	return k
 }
 
-// toError never fails: details that are absent or do not parse leave
-// Error.Details nil, and the kind and message still reach the caller.
-func (e *errorObj) toError() *Error {
-	ret := &Error{
-		Kind:    e.kind(),
-		Message: e.Message,
-	}
-	switch ret.Kind {
+// parseDetails returns the details of an answer of the given kind, read from
+// the answer's header or its details object as the kind requires. It never
+// fails: details that are absent or do not parse are nil, and the kind and
+// message still reach the caller.
+func parseDetails(kind ErrorKind, header http.Header, details json.RawMessage) error {
+	switch kind {
 	case ErrorKindUnknownHeader:
 		var d unknownHeaderError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
 		}
 	case ErrorKindRetentionLimit:
 		var d retentionLimitError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
 		}
 	case ErrorKindQueueLimit:
 		var d queueLimitError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
 		}
 	case ErrorKindQueueNotFound:
 		var d queueNotFoundError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
 		}
 	case ErrorKindQueueReplaced:
 		var d queueReplacedError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
 		}
 	case ErrorKindDedupClaimed:
 		var d dedupClaimedError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
+		}
+	case ErrorKindRateLimited:
+		// The delay travels in a header, not in the body.
+		d, err := httputil.ParseRetryAfter(time.Now(), header.Get("Retry-After"))
+		if err == nil {
+			return &RateLimitedError{
+				RetryAfter: d,
+			}
 		}
 	case ErrorKindSpoolFull:
 		var d spoolFullError
-		if err := json.Unmarshal(e.Details, &d); err == nil {
-			ret.Details = d.toError()
+		if err := json.Unmarshal(details, &d); err == nil {
+			return d.toError()
 		}
 	}
-	return ret
+	return nil
 }
 
 type unknownHeaderError struct {
@@ -569,13 +578,13 @@ func (e *spoolFullError) toError() *SpoolFullError {
 	}
 }
 
-// httpError turns the status error of an HTTP call into an [Error]. A
-// response that carried an error body becomes the Error it describes; one
-// that did not (a gateway's 502, say) carries its raw body as the message.
-//
-// Where the response names no kind this SDK knows, the kind stays unknown and
-// the status goes into the message as prose, never into a field; the
-// conditions a status signals are statusCondition's.
+// httpError turns the status error of an HTTP call into the error the
+// operation returns. An answer that names a kind or carries a message is the
+// API's and becomes the [Error] it describes, its kind ErrorKindUnknown if
+// this SDK does not know it. Any other answer (a gateway's 502, say) is not
+// the API's and becomes a plain error of its status and its body, quoted; the
+// status never reaches a field, and the conditions a status signals are
+// statusCondition's.
 //
 // Any other error is returned as is, for resultError to wrap.
 func httpError(err error) error {
@@ -583,21 +592,25 @@ func httpError(err error) error {
 	if !ok {
 		return err
 	}
-	e := new(Error)
-	var wireKind string
-	if obj, ok := se.Desc.(*errorObj); ok {
-		e = obj.toError()
-		wireKind = obj.Kind
-	} else if len(se.Body) > 0 {
-		e.Message = strconv.QuoteToASCII(string(se.Body))
+	desc, ok := se.Desc.(*errorObj)
+	if !ok || (desc.Kind == "" && desc.Message == "") {
+		if len(se.Body) == 0 {
+			return fmt.Errorf(
+				"%d %s",
+				se.Code, http.StatusText(se.Code),
+			)
+		}
+		return fmt.Errorf(
+			"%d %s: %+q",
+			se.Code, http.StatusText(se.Code), se.Body,
+		)
 	}
-	if s := se.Header.Get("Retry-After"); s != "" {
-		e.RetryAfter, _ = httputil.ParseRetryAfter(time.Now(), s)
+	kind := desc.toKind()
+	return &Error{
+		Kind:    kind,
+		Message: desc.Message,
+		Details: parseDetails(kind, se.Header, desc.Details),
 	}
-	if e.Kind == ErrorKindUnknown {
-		e.Message = statusProse(se.Code, wireKind, e.Message)
-	}
-	return e
 }
 
 // statusCondition returns the sentinel of the condition the status of err's
@@ -610,7 +623,7 @@ func statusCondition(err error) error {
 	if !ok {
 		return nil
 	}
-	if obj, ok := se.Desc.(*errorObj); ok && obj.kind() != ErrorKindUnknown {
+	if obj, ok := se.Desc.(*errorObj); ok && obj.toKind() != ErrorKindUnknown {
 		// A kind this SDK knows says what the status means.
 		return nil
 	}
@@ -618,17 +631,4 @@ func statusCondition(err error) error {
 		return ErrUnavailable
 	}
 	return nil
-}
-
-// statusProse words an HTTP status for a message, with the wire's kind if it
-// named one this SDK does not know, followed by text if any.
-func statusProse(code int, kind, text string) string {
-	s := strconv.Itoa(code) + " " + http.StatusText(code)
-	if kind != "" {
-		s += " (kind " + kind + ")"
-	}
-	if text != "" {
-		s += ": " + text
-	}
-	return s
 }

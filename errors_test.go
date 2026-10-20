@@ -41,7 +41,8 @@ func TestErrorResponse(t *testing.T) {
 		res      response
 		times    int    // Answers before the SDK gives up; 1 unless transient.
 		attempts int    // The client's Attempts; zero is the default.
-		exp      *Error // What errors.As yields.
+		exp      *Error // What errors.As yields; nil for an answer not the API's.
+		text     string // The text of an answer not the API's, after "spooler: ".
 		is       error  // The sentinel errors.Is must match, if any.
 	}{
 		{
@@ -282,9 +283,11 @@ func TestErrorResponse(t *testing.T) {
 			attempts: 2,
 			times:    2,
 			exp: &Error{
-				Kind:       ErrorKindRateLimited,
-				Message:    "slow down",
-				RetryAfter: 30 * time.Second,
+				Kind:    ErrorKindRateLimited,
+				Message: "slow down",
+				Details: &RateLimitedError{
+					RetryAfter: 30 * time.Second,
+				},
 			},
 			is: ErrRateLimited,
 		},
@@ -372,7 +375,9 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrAccountSuspended,
 		},
 		{
-			name: "an unavailable spool has no kind and matches the status sentinel, with the delay",
+			// A Retry-After outside a rate_limited answer is not a documented
+			// fact, so it is not carried.
+			name: "an unavailable spool has no kind and matches the status sentinel",
 			res: response{
 				status: 503,
 				header: http.Header{
@@ -383,8 +388,7 @@ func TestErrorResponse(t *testing.T) {
 			attempts: 2,
 			times:    2,
 			exp: &Error{
-				Message:    "503 Service Unavailable: the spool is momentarily unavailable",
-				RetryAfter: 5 * time.Second,
+				Message: "the spool is momentarily unavailable",
 			},
 			is: ErrUnavailable,
 		},
@@ -397,29 +401,27 @@ func TestErrorResponse(t *testing.T) {
 			attempts: 2,
 			times:    2,
 			exp: &Error{
-				Message: "503 Service Unavailable (kind maintenance): back in five",
+				Message: "back in five",
 			},
 			is: ErrUnavailable,
 		},
 		{
-			name: "a kind this SDK does not know on any other status names the status and the kind in prose",
+			name: "a kind this SDK does not know keeps the message and no status",
 			res: response{
 				status: 404,
 				body:   `{"kind":"teapot_not_found","message":"no teapot"}`,
 			},
 			exp: &Error{
-				Message: "404 Not Found (kind teapot_not_found): no teapot",
+				Message: "no teapot",
 			},
 		},
 		{
-			name: "a kind that is not a string is not the error shape, so the body is quoted",
+			name: "a kind that is not a string is not the error shape, so the answer is plain text",
 			res: response{
 				status: 404,
 				body:   `{"kind":1,"message":"no teapot"}`,
 			},
-			exp: &Error{
-				Message: `404 Not Found: "{\"kind\":1,\"message\":\"no teapot\"}"`,
-			},
+			text: `404 Not Found: "{\"kind\":1,\"message\":\"no teapot\"}"`,
 		},
 		{
 			name: "account blocked",
@@ -434,33 +436,36 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrAccountBlocked,
 		},
 		{
-			name: "a gateway answer with no body names the status in prose",
+			// A 502 leaves the result unknown, which the text says first.
+			name: "a gateway answer with no body is plain text naming the status",
 			res: response{
 				status: 502,
 			},
-			exp: &Error{
-				Message: "502 Bad Gateway",
-			},
+			text: "result unknown: 502 Bad Gateway",
 		},
 		{
-			name: "a gateway answer with a body quotes it",
+			name: "a gateway answer with a body is plain text quoting it",
 			res: response{
 				status: 502,
 				body:   "<html>upstream down</html>",
 			},
-			exp: &Error{
-				Message: `502 Bad Gateway: "<html>upstream down</html>"`,
-			},
+			text: `result unknown: 502 Bad Gateway: "<html>upstream down</html>"`,
 		},
 		{
-			name: "a body that is not the error shape is quoted",
+			name: "a body that is not the error shape is plain text quoting it",
 			res: response{
 				status: 400,
 				body:   "garbage",
 			},
-			exp: &Error{
-				Message: `400 Bad Request: "garbage"`,
+			text: `400 Bad Request: "garbage"`,
+		},
+		{
+			name: "an error shape that names nothing is plain text quoting it",
+			res: response{
+				status: 400,
+				body:   `{}`,
 			},
+			text: `400 Bad Request: "{}"`,
 		},
 		{
 			name: "details that do not parse leave the kind and message intact",
@@ -508,25 +513,41 @@ func TestErrorResponse(t *testing.T) {
 				}
 
 				act, ok := errors.AsType[*Error](err)
-				if !ok {
+				switch {
+				case test.exp == nil && ok:
+					t.Fatalf(
+						"error: %T; want no *Error",
+						err,
+					)
+				case test.exp == nil:
+					// An answer not the API's is plain text, prefixed like
+					// every error the client returns.
+					if act, exp := err.Error(), "spooler: "+test.text; act != exp {
+						t.Errorf(
+							"text: %q; want %q",
+							act, exp,
+						)
+					}
+				case !ok:
 					t.Fatalf(
 						"error: %T; want *Error",
 						err,
 					)
-				}
-				if diff := cmp.Diff(test.exp, act); diff != "" {
-					t.Errorf(
-						"error mismatch (-want +act):\n%s",
-						diff,
-					)
-				}
-				// Every response carries a message, and the message is the
-				// text; the fallbacks are TestErrorText's.
-				if act, exp := act.Error(), test.exp.Message; act != exp {
-					t.Errorf(
-						"text: %q; want %q",
-						act, exp,
-					)
+				default:
+					if diff := cmp.Diff(test.exp, act); diff != "" {
+						t.Errorf(
+							"error mismatch (-want +act):\n%s",
+							diff,
+						)
+					}
+					// Every answer of the API carries a message, and the
+					// message is the text; the fallbacks are TestErrorText's.
+					if act, exp := act.Error(), test.exp.Message; act != exp {
+						t.Errorf(
+							"text: %q; want %q",
+							act, exp,
+						)
+					}
 				}
 				if test.is != nil && !errors.Is(err, test.is) {
 					t.Errorf(
@@ -547,7 +568,7 @@ func TestErrorResponse(t *testing.T) {
 						err, ErrUnavailable,
 					)
 				}
-				if test.exp.Details != nil && !errors.As(err, ptrTo(test.exp.Details)) {
+				if test.exp != nil && test.exp.Details != nil && !errors.As(err, ptrTo(test.exp.Details)) {
 					t.Errorf(
 						"errors.As(%v, %T) is false; want true",
 						err, test.exp.Details,
@@ -573,6 +594,8 @@ func ptrTo(v error) any {
 		return new(*QueueReplacedError)
 	case *DedupClaimedError:
 		return new(*DedupClaimedError)
+	case *RateLimitedError:
+		return new(*RateLimitedError)
 	case *SpoolFullError:
 		return new(*SpoolFullError)
 	default:

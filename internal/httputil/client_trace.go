@@ -49,6 +49,7 @@ func LoggerRoundTripperTrace(logger *slog.Logger) RoundTripperTrace {
 }
 
 // DumpRoundTripperTrace writes every request and response to w in wire form.
+//
 // The named headers are shown as REDACTED, in both directions, so that a
 // credential never lands in a log. The dump helpers consume and replace a
 // body, so they run on the real message with its headers swapped for the

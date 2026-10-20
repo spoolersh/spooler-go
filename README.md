@@ -105,9 +105,9 @@ case errors.Is(err, spooler.ErrQueueNotFound):
 	}
 
 case errors.Is(err, spooler.ErrRateLimited):
-	var e *spooler.Error
-	if errors.As(err, &e) {
-		fmt.Println("retry after", e.RetryAfter)
+	var detail *spooler.RateLimitedError
+	if errors.As(err, &detail) {
+		fmt.Println("retry after", detail.RetryAfter)
 	}
 
 case err != nil:
@@ -115,7 +115,7 @@ case err != nil:
 }
 ```
 
-The error text is the server's message and is human readable; a program acts on the kind, the details and `RetryAfter`.
+The error text is the server's message and is human readable; a program acts on the kind and the details.
 The kinds, what each means and which are worth retrying are on [docs.spooler.sh/errors](https://docs.spooler.sh/errors).
 
 A request the client refuses before sending, such as one missing a required field, matches `spooler.ErrInvalidRequest`. 

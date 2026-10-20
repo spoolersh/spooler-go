@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -1642,7 +1643,7 @@ func errorKindOf(e *httputil.StatusError) ErrorKind {
 	if !ok {
 		return ErrorKindUnknown
 	}
-	return obj.kind()
+	return obj.toKind()
 }
 
 // retry decides for settles and reads. It retries what the errors table at
@@ -1707,12 +1708,7 @@ func resultUnknown(err error) bool {
 	if !ok {
 		return false
 	}
-	for _, err := range attempts {
-		if attemptUnknown(err) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(attempts, attemptUnknown)
 }
 
 // attemptUnknown reports whether one attempt's failure leaves open that the

@@ -130,11 +130,13 @@ is not repeated here. What follows is only the SDK's side of it.
   and neither is its call. What the SDK hands back for use gets the time
   types, since those conversions are exact: a `Retry-After` becomes a
   `time.Duration`, a timestamp a `time.Time`.
-- One error type. It carries the kind, the server's message, the retry
-  delay as a top-level `time.Duration`, and the kind's details as a typed
-  error. Every kind matches with `errors.Is` against a sentinel; a kind with
-  details also offers its type through `errors.As`. Which kinds exist and
-  what each carries is the docs' errors page, not this file.
+- One error type. It carries the kind, the server's message, and the
+  kind's details as a typed error. Every kind matches with `errors.Is`
+  against a sentinel; a kind with details also offers its type through
+  `errors.As`. A fact the docs attach to one kind is that kind's details,
+  whether it travels in the body or in a header, never a field of every
+  error. Which kinds exist and what each carries is the docs' errors page,
+  not this file.
 - The error never carries a status: the SDK is transport-agnostic, and a
   status is HTTP's. Kinds are the API's, one to one with the docs' table;
   the SDK invents none. The one condition the API reports by status alone,
@@ -143,9 +145,13 @@ is not repeated here. What follows is only the SDK's side of it.
   boundary and matched with `errors.Is`, never a kind. It matches a 503 that
   names no kind this SDK knows, so code matching it keeps working when the
   server adds a kind this SDK version does not know yet; a known kind on a
-  503 is that kind, not the condition. An answer with no kind this SDK knows is
-  ErrorKindUnknown, and only there does the status appear, as prose in the
-  message, for a person to read. Callers never parse the message.
+  503 is that kind, not the condition. An answer that names a kind or
+  carries a message is the API's and is an `Error`, its kind
+  ErrorKindUnknown when this SDK does not know it; the status appears
+  nowhere in it. An answer that does neither is not the API's and is a
+  plain error, not an `Error`, whose text is the status and the body, for
+  a person to read; the sentinels are derived all the same. Callers never
+  parse an error's text.
 - Text is for people, fields are for programs. An error prints as its kind
   followed by the server's message, which already states the facts;
   `Details` is for programmatic access only, through `errors.As`, and is

@@ -348,10 +348,10 @@ func (c *Client) Do(ctx context.Context, method string, r Request) (Response, er
 		}
 		if (c.Error != nil || r.Error != nil) && codec.Error != nil {
 			var obj any
-			if obj == nil && r.Error != nil {
+			if obj == nil && r.Error != nil { // Checks [Request.Error] callback.
 				obj = r.Error(res.StatusCode)
 			}
-			if obj == nil && c.Error != nil {
+			if obj == nil && c.Error != nil { // Checks [Client.Error] callback.
 				obj = c.Error(res.StatusCode)
 			}
 			if obj != nil {

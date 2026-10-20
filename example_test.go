@@ -131,9 +131,9 @@ func ExampleError() {
 			fmt.Println("no queue named", detail.Queue)
 		}
 	case errors.Is(err, spooler.ErrRateLimited):
-		var e *spooler.Error
-		if errors.As(err, &e) {
-			fmt.Println("retry after", e.RetryAfter)
+		var detail *spooler.RateLimitedError
+		if errors.As(err, &detail) {
+			fmt.Println("retry after", detail.RetryAfter)
 		}
 	case err != nil:
 		fmt.Println(err)
