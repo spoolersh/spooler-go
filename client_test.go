@@ -401,10 +401,10 @@ func TestClientServerMisbehaves(t *testing.T) {
 			Data:     []byte("hello"),
 			DataSize: 5,
 		}
-		if diff := cmp.Diff(exp, msg); diff != "" {
+		if !cmp.Equal(exp, msg) {
 			t.Errorf(
-				"result mismatch (-want +act):\n%s",
-				diff,
+				"result: %s",
+				cmp.Diff(exp, msg),
 			)
 		}
 		if act, exp := calls, 2; act != exp {
@@ -531,17 +531,17 @@ func TestClientTrace(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				var (
 					calls  int
-					got    RequestTrace
-					gotCtx context.Context
-					gotErr error
+					act    RequestTrace
+					actCtx context.Context
+					actErr error
 				)
 				c := &Client{
 					Trace: ClientTrace{
 						OnRequest: func(ctx context.Context, rt RequestTrace) func(error) {
 							calls++
-							got, gotCtx = rt, ctx
+							act, actCtx = rt, ctx
 							return func(err error) {
-								gotErr = err
+								actErr = err
 							}
 						},
 					},
@@ -561,16 +561,19 @@ func TestClientTrace(t *testing.T) {
 						act, exp,
 					)
 				}
-				if diff := cmp.Diff(test.exp, got); diff != "" {
+				if !cmp.Equal(test.exp, act) {
 					t.Errorf(
-						"trace mismatch (-want +act):\n%s",
-						diff,
+						"trace: %s",
+						cmp.Diff(test.exp, act),
 					)
 				}
-				if gotCtx == nil || gotCtx.Value(key{}) != "app" {
-					t.Errorf("want the caller's context; got %v", gotCtx)
+				if actCtx == nil || actCtx.Value(key{}) != "app" {
+					t.Errorf(
+						"hook context: %v; want the caller's",
+						actCtx,
+					)
 				}
-				assertError(t, gotErr, test.expErr, false)
+				assertError(t, actErr, test.expErr, false)
 			})
 		})
 	}

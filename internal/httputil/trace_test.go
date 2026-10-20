@@ -98,10 +98,10 @@ func TestDumpRoundTripperTrace(t *testing.T) {
 						Recv: textDecoder,
 					},
 				}
-				var got string
+				var act string
 				req := Request{
 					Path: "/x",
-					Recv: &got,
+					Recv: &act,
 				}
 				if test.reqBody != "" {
 					req.Send = test.reqBody
@@ -115,10 +115,10 @@ func TestDumpRoundTripperTrace(t *testing.T) {
 					)
 				}
 				// The response reached the caller intact after the dump.
-				if act, exp := got, test.resBody; act != exp {
+				if act != test.resBody {
 					t.Errorf(
 						"decoded: %q; want %q",
-						act, exp,
+						act, test.resBody,
 					)
 				}
 				out := dump.String()

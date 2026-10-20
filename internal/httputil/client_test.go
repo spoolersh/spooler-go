@@ -1124,10 +1124,14 @@ func TestDo(t *testing.T) {
 							err,
 						)
 					}
-					if diff := cmp.Diff(test.expStatus, se, cmpopts.IgnoreFields(StatusError{}, "Header"), cmpopts.EquateEmpty()); diff != "" {
+					opts := cmp.Options{
+						cmpopts.IgnoreFields(StatusError{}, "Header"),
+						cmpopts.EquateEmpty(),
+					}
+					if !cmp.Equal(test.expStatus, se, opts) {
 						t.Errorf(
-							"status error mismatch (-want +act):\n%s",
-							diff,
+							"status error: %s",
+							cmp.Diff(test.expStatus, se, opts),
 						)
 					}
 				case test.expErr != nil:
@@ -1148,11 +1152,14 @@ func TestDo(t *testing.T) {
 							err,
 						)
 					}
-					ignore := cmpopts.IgnoreFields(Response{}, "Body")
-					if diff := cmp.Diff(test.exp, act, cmpopts.EquateEmpty(), ignore); diff != "" {
+					opts := cmp.Options{
+						cmpopts.IgnoreFields(Response{}, "Body"),
+						cmpopts.EquateEmpty(),
+					}
+					if !cmp.Equal(test.exp, act, opts) {
 						t.Errorf(
-							"response mismatch (-want +act):\n%s",
-							diff,
+							"response: %s",
+							cmp.Diff(test.exp, act, opts),
 						)
 					}
 					if test.req.Stream {

@@ -115,74 +115,6 @@ func integrationQueue(t *testing.T, c *Client, settings QueueSettingsCreate) str
 	return name
 }
 
-// recvNow receives without waiting.
-func recvNow(t *testing.T, c *Client, queue string) (RecvResult, bool) {
-	t.Helper()
-	return recvWait(t, c, queue, 0)
-}
-
-// recvWait receives with the given wait.
-func recvWait(t *testing.T, c *Client, queue string, seconds int) (RecvResult, bool) {
-	t.Helper()
-	msg, ok, err := c.Recv(t.Context(), RecvRequest{
-		Spool:       integrationSpool,
-		Queue:       queue,
-		WaitSeconds: &seconds,
-	})
-	if err != nil {
-		t.Fatalf(
-			"recv: %v",
-			err,
-		)
-	}
-	return msg, ok
-}
-
-// mustRecv receives without waiting and fails if nothing was there.
-func mustRecv(t *testing.T, c *Client, queue string) RecvResult {
-	t.Helper()
-	msg, ok := recvNow(t, c, queue)
-	if !ok {
-		t.Fatalf("want a message; got nothing")
-	}
-	return msg
-}
-
-// mustRecvWait is mustRecv with a wait.
-func mustRecvWait(t *testing.T, c *Client, queue string, seconds int) RecvResult {
-	t.Helper()
-	msg, ok := recvWait(t, c, queue, seconds)
-	if !ok {
-		t.Fatalf("want a message; got nothing")
-	}
-	return msg
-}
-
-// assertEmpty receives without waiting and fails if a message was there.
-func assertEmpty(t *testing.T, c *Client, queue, when string) {
-	t.Helper()
-	if msg, ok := recvNow(t, c, queue); ok {
-		t.Errorf(
-			"%s: got message %s; want nothing",
-			when, msg.ID,
-		)
-	}
-}
-
-func send(t *testing.T, c *Client, queue string, req SendRequest) SendResult {
-	t.Helper()
-	req.Spool = integrationSpool
-	req.Queue = queue
-	res, err := c.Send(t.Context(), req)
-	if err != nil {
-		t.Fatalf(
-			"send: %v",
-			err,
-		)
-	}
-	return res
-}
-
 func TestIntegrationSendRecvAck(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -221,7 +153,16 @@ func TestIntegrationSendRecvAck(t *testing.T) {
 			c := integrationClient(t)
 			queue := integrationQueue(t, c, QueueSettingsCreate{})
 
-			sent := send(t, c, queue, test.req)
+			req := test.req
+			req.Spool = integrationSpool
+			req.Queue = queue
+			sent, err := c.Send(t.Context(), req)
+			if err != nil {
+				t.Fatalf(
+					"send: %v",
+					err,
+				)
+			}
 			if sent.ID == "" {
 				t.Errorf("want a message id; got nothing")
 			}
@@ -229,7 +170,20 @@ func TestIntegrationSendRecvAck(t *testing.T) {
 				t.Errorf("duplicate: true; want false")
 			}
 
-			msg := mustRecv(t, c, queue)
+			msg, ok, err := c.Recv(t.Context(), RecvRequest{
+				Spool:       integrationSpool,
+				Queue:       queue,
+				WaitSeconds: new(0),
+			})
+			if err != nil {
+				t.Fatalf(
+					"recv: %v",
+					err,
+				)
+			}
+			if !ok {
+				t.Fatalf("want a message; got nothing")
+			}
 			if act, exp := msg.ID, sent.ID; act != exp {
 				t.Errorf(
 					"message id: %s; want %s",
@@ -242,14 +196,15 @@ func TestIntegrationSendRecvAck(t *testing.T) {
 					act, exp,
 				)
 			}
-			if diff := cmp.Diff(test.exp, msg.Data, cmpopts.EquateEmpty()); diff != "" {
+			opts := cmpopts.EquateEmpty()
+			if !cmp.Equal(test.exp, msg.Data, opts) {
 				t.Errorf(
-					"payload mismatch (-want +act):\n%s",
-					diff,
+					"payload: %s",
+					cmp.Diff(test.exp, msg.Data, opts),
 				)
 			}
 
-			err := c.Ack(t.Context(), AckRequest{
+			err = c.Ack(t.Context(), AckRequest{
 				Spool: integrationSpool,
 				Lease: msg.Lease,
 			})
@@ -259,7 +214,23 @@ func TestIntegrationSendRecvAck(t *testing.T) {
 					err,
 				)
 			}
-			assertEmpty(t, c, queue, "after ack")
+			left, ok, err := c.Recv(t.Context(), RecvRequest{
+				Spool:       integrationSpool,
+				Queue:       queue,
+				WaitSeconds: new(0),
+			})
+			if err != nil {
+				t.Fatalf(
+					"recv after ack: %v",
+					err,
+				)
+			}
+			if ok {
+				t.Errorf(
+					"after ack: message %s; want nothing",
+					left.ID,
+				)
+			}
 		})
 	}
 }
@@ -330,11 +301,32 @@ func TestIntegrationSettle(t *testing.T) {
 			c := integrationClient(t)
 			queue := integrationQueue(t, c, QueueSettingsCreate{})
 
-			sent := send(t, c, queue, SendRequest{
-				Data: []byte("hello"),
+			sent, err := c.Send(t.Context(), SendRequest{
+				Spool: integrationSpool,
+				Queue: queue,
+				Data:  []byte("hello"),
 			})
-			msg := mustRecv(t, c, queue)
-			err := test.settle(c, t.Context(), integrationSpool, msg.Lease)
+			if err != nil {
+				t.Fatalf(
+					"send: %v",
+					err,
+				)
+			}
+			msg, ok, err := c.Recv(t.Context(), RecvRequest{
+				Spool:       integrationSpool,
+				Queue:       queue,
+				WaitSeconds: new(0),
+			})
+			if err != nil {
+				t.Fatalf(
+					"recv: %v",
+					err,
+				)
+			}
+			if !ok {
+				t.Fatalf("want a message; got nothing")
+			}
+			err = test.settle(c, t.Context(), integrationSpool, msg.Lease)
 			if err != nil {
 				t.Fatalf(
 					"settle: %v",
@@ -354,7 +346,17 @@ func TestIntegrationSettle(t *testing.T) {
 				)
 			}
 
-			again, redelivered := recvNow(t, c, queue)
+			again, redelivered, err := c.Recv(t.Context(), RecvRequest{
+				Spool:       integrationSpool,
+				Queue:       queue,
+				WaitSeconds: new(0),
+			})
+			if err != nil {
+				t.Fatalf(
+					"recv: %v",
+					err,
+				)
+			}
 			if act, exp := redelivered, test.redelivered; act != exp {
 				t.Fatalf(
 					"redelivered: %t; want %t",
@@ -395,10 +397,11 @@ func TestIntegrationSettle(t *testing.T) {
 			if test.expState != MessageStateUnknown {
 				exp = []MessageState{test.expState}
 			}
-			if diff := cmp.Diff(exp, states, cmpopts.EquateEmpty()); diff != "" {
+			opts := cmpopts.EquateEmpty()
+			if !cmp.Equal(exp, states, opts) {
 				t.Errorf(
-					"listed states mismatch (-want +act):\n%s",
-					diff,
+					"listed states: %s",
+					cmp.Diff(exp, states, opts),
 				)
 			}
 		})
@@ -497,11 +500,35 @@ func TestIntegrationDelay(t *testing.T) {
 	c := integrationClient(t)
 	queue := integrationQueue(t, c, QueueSettingsCreate{})
 
-	sent := send(t, c, queue, SendRequest{
+	sent, err := c.Send(t.Context(), SendRequest{
+		Spool:        integrationSpool,
+		Queue:        queue,
 		DelaySeconds: 1,
 		Data:         []byte("later"),
 	})
-	assertEmpty(t, c, queue, "before the delay")
+	if err != nil {
+		t.Fatalf(
+			"send: %v",
+			err,
+		)
+	}
+	early, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       queue,
+		WaitSeconds: new(0),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv before the delay: %v",
+			err,
+		)
+	}
+	if ok {
+		t.Errorf(
+			"before the delay: message %s; want nothing",
+			early.ID,
+		)
+	}
 	page, err := c.Messages(t.Context(), MessagesRequest{
 		Spool: integrationSpool,
 		Queue: queue,
@@ -523,7 +550,20 @@ func TestIntegrationDelay(t *testing.T) {
 		t.Errorf("visible at: zero; want a time")
 	}
 
-	msg := mustRecvWait(t, c, queue, 5)
+	msg, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       queue,
+		WaitSeconds: new(5),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv: %v",
+			err,
+		)
+	}
+	if !ok {
+		t.Fatalf("want a message; got nothing")
+	}
 	if act, exp := msg.ID, sent.ID; act != exp {
 		t.Errorf(
 			"after the delay: message id: %s; want %s",
@@ -540,10 +580,31 @@ func TestIntegrationAckAndSend(t *testing.T) {
 		DedupWindowSeconds: new(60),
 	})
 
-	send(t, c, in, SendRequest{
-		Data: []byte("in"),
+	_, err := c.Send(t.Context(), SendRequest{
+		Spool: integrationSpool,
+		Queue: in,
+		Data:  []byte("in"),
 	})
-	msg := mustRecv(t, c, in)
+	if err != nil {
+		t.Fatalf(
+			"send: %v",
+			err,
+		)
+	}
+	msg, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       in,
+		WaitSeconds: new(0),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv: %v",
+			err,
+		)
+	}
+	if !ok {
+		t.Fatalf("want a message; got nothing")
+	}
 
 	res, err := c.AckAndSend(t.Context(), AckAndSendRequest{
 		Spool: integrationSpool,
@@ -562,8 +623,37 @@ func TestIntegrationAckAndSend(t *testing.T) {
 		t.Errorf("want a message id; got nothing")
 	}
 
-	assertEmpty(t, c, in, "input after ack and send")
-	forwarded := mustRecv(t, c, out)
+	left, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       in,
+		WaitSeconds: new(0),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv input after ack and send: %v",
+			err,
+		)
+	}
+	if ok {
+		t.Errorf(
+			"input after ack and send: message %s; want nothing",
+			left.ID,
+		)
+	}
+	forwarded, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       out,
+		WaitSeconds: new(0),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv forwarded: %v",
+			err,
+		)
+	}
+	if !ok {
+		t.Fatalf("want a forwarded message; got nothing")
+	}
 	if act, exp := forwarded.ID, res.ID; act != exp {
 		t.Errorf(
 			"output message id: %s; want %s",
@@ -629,12 +719,33 @@ func TestIntegrationFailed(t *testing.T) {
 				MaxRetries: new(0),
 			})
 
-			sent := send(t, c, queue, SendRequest{
-				Data: []byte("poison"),
+			sent, err := c.Send(t.Context(), SendRequest{
+				Spool: integrationSpool,
+				Queue: queue,
+				Data:  []byte("poison"),
 			})
-			msg := mustRecv(t, c, queue)
+			if err != nil {
+				t.Fatalf(
+					"send: %v",
+					err,
+				)
+			}
+			msg, ok, err := c.Recv(t.Context(), RecvRequest{
+				Spool:       integrationSpool,
+				Queue:       queue,
+				WaitSeconds: new(0),
+			})
+			if err != nil {
+				t.Fatalf(
+					"recv: %v",
+					err,
+				)
+			}
+			if !ok {
+				t.Fatalf("want a message; got nothing")
+			}
 			// With no retries allowed, a nack fails the message.
-			err := c.Nack(t.Context(), NackRequest{
+			err = c.Nack(t.Context(), NackRequest{
 				Spool: integrationSpool,
 				Lease: msg.Lease,
 			})
@@ -644,7 +755,23 @@ func TestIntegrationFailed(t *testing.T) {
 					err,
 				)
 			}
-			assertEmpty(t, c, queue, "after the last retry")
+			left, ok, err := c.Recv(t.Context(), RecvRequest{
+				Spool:       integrationSpool,
+				Queue:       queue,
+				WaitSeconds: new(0),
+			})
+			if err != nil {
+				t.Fatalf(
+					"recv after the last retry: %v",
+					err,
+				)
+			}
+			if ok {
+				t.Errorf(
+					"after the last retry: message %s; want nothing",
+					left.ID,
+				)
+			}
 
 			page, err := c.Messages(t.Context(), MessagesRequest{
 				Spool:        integrationSpool,
@@ -698,7 +825,7 @@ func TestIntegrationFailed(t *testing.T) {
 			opts := cmpopts.IgnoreFields(InspectResult{}, "CreatedAt", "ExpiresAt")
 			if !cmp.Equal(exp, act, opts) {
 				t.Errorf(
-					"inspect mismatch (-want +act):\n%s",
+					"inspect: %s",
 					cmp.Diff(exp, act, opts),
 				)
 			}
@@ -795,10 +922,31 @@ func TestIntegrationLeaseExpiry(t *testing.T) {
 		LeaseTimeoutSeconds: new(1),
 	})
 
-	sent := send(t, c, queue, SendRequest{
-		Data: []byte("slow"),
+	sent, err := c.Send(t.Context(), SendRequest{
+		Spool: integrationSpool,
+		Queue: queue,
+		Data:  []byte("slow"),
 	})
-	msg := mustRecv(t, c, queue)
+	if err != nil {
+		t.Fatalf(
+			"send: %v",
+			err,
+		)
+	}
+	msg, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       queue,
+		WaitSeconds: new(0),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv: %v",
+			err,
+		)
+	}
+	if !ok {
+		t.Fatalf("want a message; got nothing")
+	}
 	expires := msg.LeaseExpiresAt
 	if expires.IsZero() {
 		t.Fatalf("want an expiry; got none")
@@ -824,7 +972,20 @@ func TestIntegrationLeaseExpiry(t *testing.T) {
 
 	// Left alone, the lease times out and the message comes back as a
 	// retry; the old lease then settles nothing.
-	redelivered := mustRecvWait(t, c, queue, 5)
+	redelivered, ok, err := c.Recv(t.Context(), RecvRequest{
+		Spool:       integrationSpool,
+		Queue:       queue,
+		WaitSeconds: new(5),
+	})
+	if err != nil {
+		t.Fatalf(
+			"recv after lease expiry: %v",
+			err,
+		)
+	}
+	if !ok {
+		t.Fatalf("want a redelivery; got nothing")
+	}
 	if act, exp := redelivered.ID, sent.ID; act != exp {
 		t.Fatalf(
 			"redelivered message id: %s; want %s",
@@ -856,7 +1017,7 @@ func TestIntegrationQueues(t *testing.T) {
 		MaxRetries: new(3),
 	})
 
-	got, err := c.Queue(t.Context(), QueueRequest{
+	act, err := c.Queue(t.Context(), QueueRequest{
 		Spool: integrationSpool,
 		Queue: queue,
 	})
@@ -866,22 +1027,22 @@ func TestIntegrationQueues(t *testing.T) {
 			err,
 		)
 	}
-	if act, exp := got.Name, queue; act != exp {
+	if act.Name != queue {
 		t.Errorf(
 			"name: %s; want %s",
-			act, exp,
+			act.Name, queue,
 		)
 	}
-	if act, exp := got.State, QueueStateActive; act != exp {
+	if act.State != QueueStateActive {
 		t.Errorf(
 			"state: %v; want %v",
-			act, exp,
+			act.State, QueueStateActive,
 		)
 	}
-	if act, exp := got.Settings.MaxRetries, 3; act != exp {
+	if act.Settings.MaxRetries != 3 {
 		t.Errorf(
 			"max retries: %d; want %d",
-			act, exp,
+			act.Settings.MaxRetries, 3,
 		)
 	}
 
@@ -898,7 +1059,7 @@ func TestIntegrationQueues(t *testing.T) {
 			err,
 		)
 	}
-	got, err = c.Queue(t.Context(), QueueRequest{
+	act, err = c.Queue(t.Context(), QueueRequest{
 		Spool: integrationSpool,
 		Queue: queue,
 	})
@@ -908,10 +1069,10 @@ func TestIntegrationQueues(t *testing.T) {
 			err,
 		)
 	}
-	if act, exp := got.Settings.MaxRetries, 7; act != exp {
+	if act.Settings.MaxRetries != 7 {
 		t.Errorf(
 			"max retries after update: %d; want %d",
-			act, exp,
+			act.Settings.MaxRetries, 7,
 		)
 	}
 
@@ -926,9 +1087,17 @@ func TestIntegrationQueues(t *testing.T) {
 		)
 	}
 
-	send(t, c, queue, SendRequest{
-		Data: []byte("counted"),
+	_, err = c.Send(t.Context(), SendRequest{
+		Spool: integrationSpool,
+		Queue: queue,
+		Data:  []byte("counted"),
 	})
+	if err != nil {
+		t.Fatalf(
+			"send: %v",
+			err,
+		)
+	}
 	q, err := c.Queue(t.Context(), QueueRequest{
 		Spool: integrationSpool,
 		Queue: queue,

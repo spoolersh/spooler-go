@@ -372,16 +372,31 @@ addition:
   `github.com/google/go-cmp/cmp`: the test is `cmp.Equal(exp, act, opts)`,
   and `cmp.Diff(exp, act, opts)` appears only inside the error message. Never
   `if diff := cmp.Diff(...); diff != ""`: that reads a report as a boolean
-  and puts a multi-line call in an `if` header.
+  and puts a multi-line call in an `if` header. Options are built into an
+  `opts` variable before the two calls, never written inline as arguments,
+  so Equal and Diff cannot drift apart. The message is the name of what
+  is compared, a colon and `%s`, as in `"payload: %s"`: no "mismatch", no
+  `(-want +act)` legend and no `\n` before the diff, whose own markers say
+  which side is which.
 
+      opts := cmp.Options{
+      	cmpopts.IgnoreFields(InspectResult{}, "CreatedAt"),
+      	cmpopts.EquateEmpty(),
+      }
       if !cmp.Equal(exp, act, opts) {
       	t.Errorf(
-      		"inspect mismatch (-want +act):\n%s",
+      		"inspect: %s",
       		cmp.Diff(exp, act, opts),
       	)
       }
 - Stubs use the `Do*` function-field pattern with a compile-time interface
   check and a default error naming the method.
+- A test helper that wraps one call and fails on its error is not
+  justified: it saves one `if err != nil` and costs a hop between the
+  failure and the line that caused it. Write the call and its check inline.
+  A helper (`t.Helper()`) earns its place when it combines several checks
+  (an error and a comma-ok, a decode and a read), builds a fixture, or
+  registers cleanup.
 - Unit tests run every operation through one generic table runner against a
   stub transport, inside a `testing/synctest` bubble so backoff and retry
   delays take no real time. A case lists the exchanges it expects, each an

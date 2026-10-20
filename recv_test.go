@@ -959,11 +959,14 @@ func TestRecvStream(t *testing.T) {
 						act, exp,
 					)
 				}
-				ignore := cmpopts.IgnoreFields(RecvResult{}, "DataStream")
-				if diff := cmp.Diff(test.exp, act, cmpopts.EquateEmpty(), ignore); diff != "" {
+				opts := cmp.Options{
+					cmpopts.IgnoreFields(RecvResult{}, "DataStream"),
+					cmpopts.EquateEmpty(),
+				}
+				if !cmp.Equal(test.exp, act, opts) {
 					t.Errorf(
-						"result mismatch (-want +act):\n%s",
-						diff,
+						"result: %s",
+						cmp.Diff(test.exp, act, opts),
 					)
 				}
 				if !ok {
@@ -1038,11 +1041,14 @@ func TestInspectStream(t *testing.T) {
 			Retries:  5,
 			DataSize: 6,
 		}
-		ignore := cmpopts.IgnoreFields(InspectResult{}, "DataStream")
-		if diff := cmp.Diff(exp, act, cmpopts.EquateEmpty(), ignore); diff != "" {
+		opts := cmp.Options{
+			cmpopts.IgnoreFields(InspectResult{}, "DataStream"),
+			cmpopts.EquateEmpty(),
+		}
+		if !cmp.Equal(exp, act, opts) {
 			t.Errorf(
-				"result mismatch (-want +act):\n%s",
-				diff,
+				"result: %s",
+				cmp.Diff(exp, act, opts),
 			)
 		}
 		if act.DataStream == nil {

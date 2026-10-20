@@ -413,10 +413,10 @@ func TestTryCtxCancelReturnsLastErr(t *testing.T) {
 func TestStrategyReceivesIncrementingAttempt(t *testing.T) {
 	// Verify Strategy.Delay is called with i=0, 1, ..., n-1 once per attempt:
 	// 0 precedes the initial call, and strategies map it to no delay.
-	var got []int
+	var act []int
 	s := strategyRecorder{
 		fn: func(i int) time.Duration {
-			got = append(got, i)
+			act = append(act, i)
 			return 0
 		},
 	}
@@ -431,13 +431,13 @@ func TestStrategyReceivesIncrementingAttempt(t *testing.T) {
 	if act, exp := calls, 4; act != exp {
 		t.Errorf("calls: %d; want %d", act, exp)
 	}
-	for k, v := range got {
+	for k, v := range act {
 		if exp := k; v != exp {
 			t.Errorf("Delay arg[%d]: %d; want %d", k, v, exp)
 		}
 	}
-	if act, exp := len(got), 4; act != exp {
-		t.Errorf("Delay calls: %d; want %d", act, exp)
+	if len(act) != 4 {
+		t.Errorf("Delay calls: %d; want %d", len(act), 4)
 	}
 }
 

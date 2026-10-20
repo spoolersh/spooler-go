@@ -534,10 +534,10 @@ func TestErrorResponse(t *testing.T) {
 						err,
 					)
 				default:
-					if diff := cmp.Diff(test.exp, act); diff != "" {
+					if !cmp.Equal(test.exp, act) {
 						t.Errorf(
-							"error mismatch (-want +act):\n%s",
-							diff,
+							"error: %s",
+							cmp.Diff(test.exp, act),
 						)
 					}
 					// Every answer of the API carries a message, and the

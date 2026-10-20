@@ -101,10 +101,11 @@ func testOp[Req, Res any](
 				act, err := op(c, t.Context(), test.req)
 				done()
 				assertError(t, err, test.expErr, test.err)
-				if diff := cmp.Diff(test.exp, act, cmpopts.EquateEmpty()); diff != "" {
+				opts := cmpopts.EquateEmpty()
+				if !cmp.Equal(test.exp, act, opts) {
 					t.Errorf(
-						"result mismatch (-want +act):\n%s",
-						diff,
+						"result: %s",
+						cmp.Diff(test.exp, act, opts),
 					)
 				}
 			})
@@ -134,10 +135,11 @@ func testOpOK[Req, Res any](
 						act, exp,
 					)
 				}
-				if diff := cmp.Diff(test.exp, act, cmpopts.EquateEmpty()); diff != "" {
+				opts := cmpopts.EquateEmpty()
+				if !cmp.Equal(test.exp, act, opts) {
 					t.Errorf(
-						"result mismatch (-want +act):\n%s",
-						diff,
+						"result: %s",
+						cmp.Diff(test.exp, act, opts),
 					)
 				}
 			})
@@ -214,10 +216,12 @@ func assertRequest(t *testing.T, n int, r *http.Request, x request) {
 			n, act, exp,
 		)
 	}
-	if diff := cmp.Diff(x.query, r.URL.Query(), cmpopts.EquateEmpty()); diff != "" {
+	opts := cmpopts.EquateEmpty()
+	query := r.URL.Query()
+	if !cmp.Equal(x.query, query, opts) {
 		t.Errorf(
-			"request %d: query mismatch (-want +act):\n%s",
-			n, diff,
+			"request %d: query: %s",
+			n, cmp.Diff(x.query, query, opts),
 		)
 	}
 
@@ -243,10 +247,10 @@ func assertRequest(t *testing.T, n int, r *http.Request, x request) {
 	header.Del("Authorization")
 	header.Del("User-Agent")
 	header.Del("X-Request-Id")
-	if diff := cmp.Diff(x.header, header, cmpopts.EquateEmpty()); diff != "" {
+	if !cmp.Equal(x.header, header, opts) {
 		t.Errorf(
-			"request %d: header mismatch (-want +act):\n%s",
-			n, diff,
+			"request %d: header: %s",
+			n, cmp.Diff(x.header, header, opts),
 		)
 	}
 

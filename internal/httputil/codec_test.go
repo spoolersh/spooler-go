@@ -399,10 +399,10 @@ func TestJSONCodec(t *testing.T) {
 						err,
 					)
 				}
-				if diff := cmp.Diff(test.exp, act); diff != "" {
+				if !cmp.Equal(test.exp, act) {
 					t.Errorf(
-						"decoded mismatch (-want +act):\n%s",
-						diff,
+						"decoded: %s",
+						cmp.Diff(test.exp, act),
 					)
 				}
 			})

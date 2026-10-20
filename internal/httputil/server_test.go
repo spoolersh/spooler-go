@@ -227,10 +227,14 @@ func TestServer(t *testing.T) {
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			if diff := cmp.Diff(test.exp, act, cmp.AllowUnexported(arrival{}), cmpopts.EquateEmpty()); diff != "" {
+			opts := cmp.Options{
+				cmp.AllowUnexported(arrival{}),
+				cmpopts.EquateEmpty(),
+			}
+			if !cmp.Equal(test.exp, act, opts) {
 				t.Errorf(
-					"arrival mismatch (-want +act):\n%s",
-					diff,
+					"arrival: %s",
+					cmp.Diff(test.exp, act, opts),
 				)
 			}
 			if act, exp := connects, 1; act != exp {

@@ -99,10 +99,11 @@ func assertRequest(t *testing.T, n int, r *http.Request, x request) {
 		)
 	}
 	header.Del("X-Request-Id")
-	if diff := cmp.Diff(x.header, header, cmpopts.EquateEmpty()); diff != "" {
+	opts := cmpopts.EquateEmpty()
+	if !cmp.Equal(x.header, header, opts) {
 		t.Errorf(
-			"request %d: header mismatch (-want +act):\n%s",
-			n, diff,
+			"request %d: header: %s",
+			n, cmp.Diff(x.header, header, opts),
 		)
 	}
 	var body []byte
