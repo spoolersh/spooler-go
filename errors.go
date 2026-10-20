@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -579,6 +580,14 @@ func (e *spoolFullError) toError() *SpoolFullError {
 //
 // Any other error is returned as is, for resultError to wrap.
 func httpError(err error) error {
+	te, ok := errors.AsType[*httputil.TransportError](err)
+	if ok {
+		ue, ok := errors.AsType[*url.Error](te.Err)
+		if !ok {
+			return err
+		}
+		return ue.Err
+	}
 	se, ok := errors.AsType[*httputil.StatusError](err)
 	if !ok {
 		return err
