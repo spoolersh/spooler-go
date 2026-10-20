@@ -335,7 +335,9 @@ addition:
   `t.Errorf` broken so the format string and each argument sit on their own
   line.
 - Assign a multi-line call on its own line, then `if err != nil`; never inline
-  it.
+  it. An `if` header is always one line: a condition that would wrap (a
+  struct literal, a call with options) is computed into a variable first,
+  and the `if` tests the variable.
 - Method case signals locking: an exported-style name synchronises itself, a
   lowercase one is a lock-held helper.
 - Validation: check locally only what the server can never see. The test is
@@ -362,10 +364,22 @@ addition:
   phrases without underscores. Case structs hold scenario data only; mocks and
   fake servers are assembled in the `t.Run` body from that data.
 - Assertions: actual first, then want, never "got": `t.Errorf("status: %d; want
-  %d", act, exp)`. Specific errors compare with `errors.Is` against an `expErr
+  %d", act, exp)`. The value under test is named `act` and the expectation
+  `exp` wherever that applies, never `got`, `want` or a word for the
+  operation (`inspected`, `received`). Specific errors compare with `errors.Is` against an `expErr
   error` field; presence-only with an `err bool` field and the two-branch idiom
   ("want error; got nothing"). Struct comparison with
-  `github.com/google/go-cmp/cmp` and `cmp.Diff(exp, act, opts)`.
+  `github.com/google/go-cmp/cmp`: the test is `cmp.Equal(exp, act, opts)`,
+  and `cmp.Diff(exp, act, opts)` appears only inside the error message. Never
+  `if diff := cmp.Diff(...); diff != ""`: that reads a report as a boolean
+  and puts a multi-line call in an `if` header.
+
+      if !cmp.Equal(exp, act, opts) {
+      	t.Errorf(
+      		"inspect mismatch (-want +act):\n%s",
+      		cmp.Diff(exp, act, opts),
+      	)
+      }
 - Stubs use the `Do*` function-field pattern with a compile-time interface
   check and a default error naming the method.
 - Unit tests run every operation through one generic table runner against a

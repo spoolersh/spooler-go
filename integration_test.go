@@ -676,7 +676,7 @@ func TestIntegrationFailed(t *testing.T) {
 			}
 
 			// An inspect reads it where it is and leaves the handle valid.
-			inspected, err := c.Inspect(t.Context(), InspectRequest{
+			act, err := c.Inspect(t.Context(), InspectRequest{
 				Spool:  integrationSpool,
 				Handle: failed.Handle,
 			})
@@ -686,15 +686,41 @@ func TestIntegrationFailed(t *testing.T) {
 					err,
 				)
 			}
-			if diff := cmp.Diff(InspectResult{
-				ID:      sent.ID,
-				State:   MessageStateFailed,
-				Retries: 0,
-				Data:    []byte("poison"),
-			}, inspected); diff != "" {
+			// The server picks the timestamps: the creation time is always
+			// reported, the expiry whenever the queue retains for a period.
+			exp := InspectResult{
+				ID:       sent.ID,
+				State:    MessageStateFailed,
+				Retries:  0,
+				Data:     []byte("poison"),
+				DataSize: int64(len("poison")),
+			}
+			opts := cmpopts.IgnoreFields(InspectResult{}, "CreatedAt", "ExpiresAt")
+			if !cmp.Equal(exp, act, opts) {
 				t.Errorf(
 					"inspect mismatch (-want +act):\n%s",
-					diff,
+					cmp.Diff(exp, act, opts),
+				)
+			}
+			if act.CreatedAt.IsZero() {
+				t.Errorf("inspect created at: zero; want a time")
+			}
+			q, err := c.Queue(t.Context(), QueueRequest{
+				Spool: integrationSpool,
+				Queue: queue,
+			})
+			if err != nil {
+				t.Fatalf(
+					"queue: %v",
+					err,
+				)
+			}
+			hasExpiry := !act.ExpiresAt.IsZero()
+			retains := q.Settings.EffectiveRetentionSeconds != 0
+			if hasExpiry != retains {
+				t.Errorf(
+					"inspect has an expiry: %t; want %t for retention of %ds",
+					hasExpiry, retains, q.Settings.EffectiveRetentionSeconds,
 				)
 			}
 
