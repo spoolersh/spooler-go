@@ -1,6 +1,7 @@
-# Checks a release: a tag v<X> must be on a commit whose version.go says X,
-# so the tagged tree and the constant always agree. A release is cut by
-# hand: bump the constant, commit, tag that commit v<X> and push the tag.
+# Files a release from a tag: the tagged commit must pass CI, and a tag
+# v<X> must be on a commit whose version.go says X, so the tagged tree and
+# the constant always agree. A release is cut by hand: bump the constant,
+# commit, tag that commit v<X> and push the tag.
 name: Release
 
 on:
@@ -8,10 +9,14 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yaml
+
   release:
+    needs: ci
     runs-on: ubuntu-latest
 
     steps:
@@ -21,3 +26,10 @@ jobs:
       - name: Check version
         run: |
           grep -Fxq "const Version = \"${GITHUB_REF_NAME#v}\"" version.go
+
+      # The module is the release; the page carries the notes from the
+      # commits since the previous tag.
+      - name: Release
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
