@@ -1,5 +1,6 @@
 package spooler
 
-// Version is the SDK release, without the v prefix. The release workflow
-// rewrites it and tags the commit; the user agent carries it.
+// Version is the SDK release, without the v prefix; the user agent carries
+// it. A release bumps it and tags the commit v<Version>; the release
+// workflow checks that the tag and the constant agree.
 const Version = "0.0.0-dev"
