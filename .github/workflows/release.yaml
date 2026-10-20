@@ -1,7 +1,8 @@
-# Files a release from a tag: the tagged commit must pass CI, and a tag
-# v<X> must be on a commit whose version.go says X, so the tagged tree and
-# the constant always agree. A release is cut by hand: bump the constant,
-# commit, tag that commit v<X> and push the tag.
+# Files a release from a tag: the tagged commit must pass CI, and the tag
+# must be on a commit whose version.go says exactly that, so the tagged tree
+# and the constant always agree. A release is cut by hand: bump the
+# constant, commit, tag that commit with the constant's value and push the
+# tag.
 name: Release
 
 on:
@@ -23,9 +24,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # That the constant is a semantic version is TestVersion's job, run
+      # by CI above; this step only ties the tag to it.
       - name: Check version
         run: |
-          grep -Fxq "const Version = \"${GITHUB_REF_NAME#v}\"" version.go
+          grep -Fxq "const Version = \"$GITHUB_REF_NAME\"" version.go
 
       # The module is the release; the page carries the notes from the
       # commits since the previous tag.
