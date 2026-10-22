@@ -423,6 +423,34 @@ HTTP API as the differentiator. Examples compile: a README example is a
 `Example*` test. The first example is the send, receive, ack loop against the
 local image, in under a screen.
 
+## The skill
+
+`skills/spooler-go/SKILL.md` is an [Agent Skill](https://agentskills.io)
+for agents that *use* this SDK, installable with `npx skills add
+spoolersh/spooler-go` and mirrored into the `spoolersh/ai` repo. It is
+published content, like the README: it restates the SDK's surface and
+the docs' rules in the few thousand tokens an agent loads, with a link
+for the rest. It is not loaded by agents working on this repo and says
+nothing about how the SDK is built.
+
+- **Whoever changes the public surface updates the skill in the same
+  change**: a method, a request or result field, a sentinel, a constant
+  such as `DefaultAttempts`, a default, or the behaviour a doc comment
+  states. Nothing checks this mechanically: before a hand-off, read the
+  skill against `go doc -all .` and fix every name, value and example
+  that differs.
+- The skill's `metadata.version` is `Version` verbatim, the release it
+  describes, and moves with it in the release commit; the release
+  workflow refuses a tag that disagrees with either.
+- The skill carries API facts (statuses, kinds, bounds) only where an
+  agent writing Go needs them in context, copied from the docs at the
+  time and cited; the docs stay the source, and the rule above that this
+  file states nothing about the API holds for this file, not for the
+  skill.
+- The same voice as the README and the doc comments: terse, factual, the
+  docs' vocabulary, no superlatives; examples must compile against the
+  SDK at `Version`.
+
 ## Editing files
 
 Agents change project files only with the edit tool, one visible edit at a

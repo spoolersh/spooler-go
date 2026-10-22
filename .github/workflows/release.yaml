@@ -25,10 +25,12 @@ jobs:
         uses: actions/checkout@v7
 
       # That the constant is a semantic version is TestVersion's job, run
-      # by CI above; this step only ties the tag to it.
+      # by CI above; this step only ties the tag to it, and to the skill,
+      # which describes one release: the one the tag names.
       - name: Check version
         run: |
           grep -Fxq "const Version = \"$GITHUB_REF_NAME\"" version.go
+          grep -Fxq "  version: $GITHUB_REF_NAME" skills/spooler-go/SKILL.md
 
       # The module is the release; the page carries the notes from the
       # commits since the previous tag.
@@ -36,3 +38,22 @@ jobs:
         run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Tells spoolersh/ai to mirror skills/spooler-go from this release, so
+  # the copy there does not wait for the daily run. Its own job: the
+  # release is out once the job above ends, and a failed dispatch must not
+  # paint it red. GITHUB_TOKEN cannot dispatch to another repository;
+  # MIRROR_TOKEN is a token with contents write on spoolersh/ai.
+  mirror:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Dispatch
+        run: |
+          gh api repos/spoolersh/ai/dispatches \
+            -f event_type=mirror \
+            -f "client_payload[repository]=$GITHUB_REPOSITORY" \
+            -f "client_payload[tag]=$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ secrets.MIRROR_TOKEN }}
