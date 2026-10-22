@@ -1,6 +1,6 @@
 ---
 name: spooler-go
-description: Write Go code against the Spooler message queue with the official SDK, module github.com/spoolersh/spooler-go (package spooler). Covers spooler.Client setup, the send, receive, ack loop, the settles, renew, errors.Is sentinels and ErrResultUnknown, dedup keys, delayed sends and handles, failed-message triage with the iterators, queue settings, streaming payloads and tests against the spoolersh/memspoold image. Use when Go code imports spooler-go, mentions spooler.Client, Lease, Handle or SendRequest, or a Go service needs a background job or work queue on Spooler.
+description: Write Go code against the Spooler message queue with the official SDK, module github.com/spoolersh/spooler-go (package spooler). Covers spooler.Client setup, the send, receive, ack loop, the settles, renew, errors.Is sentinels and ErrResultUnknown, dedup keys, delayed sends and handles, failed messages (list, inspect, recover, discard) with the iterators, queue settings, streaming payloads and tests against the spoolersh/memspoold image. Use when Go code imports spooler-go, mentions spooler.Client, Lease, Handle or SendRequest, or a Go service needs a message queue on Spooler.
 metadata:
   author: spoolersh
   version: v0.2.0
@@ -28,7 +28,8 @@ go get github.com/spoolersh/spooler-go
   Handlers must be idempotent: delivery is at least once.
 - Nack is the error path (counts a retry; past the queue's max the message is
   failed). Release is for "not the message's fault" and counts nothing. Fail
-  marks message failed ("poisoned") for later inspection of failed messages.
+  fails the message at once, for one the consumer can tell is poison; it stays
+  intact for the listing, inspect, recover and discard.
 - `Lease` and `Handle` are opaque credentials; never build or compare them.
   Message ids are for logs; no call takes one.
 - The SDK adds no guarantee and hides none: no automatic ack, renew, batching
@@ -50,10 +51,12 @@ c := spooler.Client{
 
 - Share one `Client`; it is safe for concurrent use and owns a connection pool.
   Never copy it by value; `c.Clone()` makes a second one.
-- `Attempts` (default `DefaultAttempts`, currently 5) bounds retries of
-  conditions the docs call transient and harmless to repeat: rate limits
-  honoring `Retry-After`, `ErrUnavailable`, `ErrQueueCreating`, `ErrQueueBusy`,
-  `ErrDedupInFlight`. Set `Attempts: 1` when the application has its own retry
+- `Attempts` (default `DefaultAttempts`, currently 5) bounds retries of what
+  the docs' errors table marks transient and changed nothing, and the set
+  depends on the operation: every operation retries `ErrRateLimited` (after
+  `Retry-After`) and `ErrUnavailable`; a send or ack-and-send also retries
+  `ErrDedupInFlight`; every other operation also retries `ErrQueueCreating`
+  and `ErrQueueBusy`. Set `Attempts: 1` when the application has its own retry
   policy.
 - Put a deadline on the context; it bounds every request.
 - Every request type names its `Spool`. There is no client-level default.
@@ -76,7 +79,10 @@ res, err := c.Send(ctx, spooler.SendRequest{
 	Queue: "jobs",
 	Data:  payload,
 })
-// res.ID for logs; res.Duplicate on a dedup hit.
+if err != nil {
+	return err
+}
+log.Println("sent", res.ID) // res.Duplicate reports a dedup hit.
 
 msg, ok, err := c.Recv(ctx, spooler.RecvRequest{
 	Spool:       "default",
@@ -87,7 +93,7 @@ if err != nil {
 	return err
 }
 if !ok {
-	// Nothing became visible within the wait. Loop.
+	return nil // Nothing became visible within the wait; call again.
 }
 if err := handle(msg.Data); err != nil {
 	return c.Nack(ctx, spooler.NackRequest{
@@ -112,7 +118,7 @@ no callback or channel consumer in the SDK.
 | `Ack` | `AckRequest{Spool, Lease}` | removes the message |
 | `Nack` | `NackRequest{Spool, Lease}` | redeliver; counts a retry; past `MaxRetries` the message is failed |
 | `Release` | `ReleaseRequest{Spool, Lease, DelaySeconds}` | redeliver without a retry; optional backoff |
-| `Fail` | `FailRequest{Spool, Lease}` | failed now, for triage |
+| `Fail` | `FailRequest{Spool, Lease}` | failed now, kept intact for the listing, inspect, recover and discard |
 | `Discard` | `DiscardRequest{Spool, Lease}` or `{Spool, Handle}` | gone, counted as discarded |
 | `AckAndSend` | `AckAndSendRequest{Spool, Lease, Queue, Data, ...}` | ack + append atomically; returns `AckAndSendResult{ID, Handle}` |
 | `Renew` | `RenewRequest{Spool, Lease}` | not a settle; resets expiry; returns `RenewResult{LeaseExpiresAt}` |
@@ -132,18 +138,25 @@ Every API answer with a kind is a `*spooler.Error`. Match the kind with
 
 ```go
 switch {
-case errors.Is(err, spooler.ErrQueueNotFound):
-	var d *spooler.QueueNotFoundError // d.Queue
-case errors.Is(err, spooler.ErrRateLimited):
-	var d *spooler.RateLimitedError // d.RetryAfter time.Duration
-case errors.Is(err, spooler.ErrSpoolFull):
-	// backpressure: consume and ack, or delete queues, then retry
 case errors.Is(err, spooler.ErrResultUnknown):
-	// the change may have applied; see below
+	// The change may have applied; see below. Check it first.
+case errors.Is(err, spooler.ErrQueueNotFound):
+	var d *spooler.QueueNotFoundError
+	if errors.As(err, &d) {
+		log.Println("no such queue:", d.Queue)
+	}
+case errors.Is(err, spooler.ErrRateLimited):
+	// The SDK already waited Retry-After and retried, Attempts times.
+	var d *spooler.RateLimitedError
+	if errors.As(err, &d) {
+		time.Sleep(d.RetryAfter)
+	}
+case errors.Is(err, spooler.ErrSpoolFull):
+	// Backpressure: consume and ack, or delete queues, then retry.
 case errors.Is(err, spooler.ErrUnavailable):
-	// 503 with no kind; the SDK already retried Attempts times
+	// 503 with no kind; the SDK already retried Attempts times.
 case errors.Is(err, spooler.ErrInvalidRequest):
-	// refused before sending: missing field, both of an either/or set
+	// Refused before sending: a missing field, or both of an either/or set.
 }
 ```
 
@@ -156,7 +169,8 @@ Sentinels, one per kind: `ErrInvalidToken`, `ErrDedupDisabled`,
 `ErrAccountSuspended`, `ErrAccountBlocked`. Details types:
 `QueueNotFoundError{Queue}`, `QueueLimitError{Max}`, `RetentionLimitError{Max
 time.Duration}`, `RateLimitedError{RetryAfter}`, `DedupClaimedError{ID}`,
-`QueueReplacedError{UID}`.
+`QueueReplacedError{UID}`, `SpoolFullError{Limit, Max}`,
+`UnknownHeaderError{Header}`.
 
 Errors carry no HTTP status. Act on the kind, *NEVER* on the text.
 
@@ -167,13 +181,17 @@ no definite answer (a `500`, `502`, `504`, a dropped connection). The SDK does
 not retry those unless the request sets `RetryUnknown`:
 
 - `SendRequest{RetryUnknown: true}` may append the message twice (a second id).
-  With `Dedup` set, a retry inside the queue's dedup window appends nothing
-  new, so set both and be conservative on the window.
-- `AckAndSendRequest{RetryUnknown: true}` never appends twice: a retry of
-  a committed call fails with `ErrStaleToken`.
+  With `Dedup` set, a retry appends nothing new while the queue's dedup window
+  still remembers the key and the window was not changed in between; see
+  https://docs.spooler.sh/dedup.
+- `AckAndSendRequest{RetryUnknown: true}` never appends twice: a retry of a
+  committed call fails with `ErrStaleToken` and appends nothing. That error
+  also matches `ErrResultUnknown`, since it does not prove the first attempt
+  succeeded.
 
 Without `RetryUnknown`, the caller decides. Check `ErrResultUnknown` before
-`ErrUnavailable`: a later attempt's `503` does not clear an earlier unknown.
+`ErrUnavailable` and `ErrStaleToken`: a later attempt's answer does not clear
+an earlier unknown.
 
 ## Dedup
 
@@ -211,7 +229,7 @@ err = c.Discard(ctx, spooler.DiscardRequest{
 // ErrStaleToken: a consumer already received it.
 ```
 
-## Failed-message triage
+## Failed messages
 
 ```go
 seq := spooler.Messages(ctx, &c, spooler.MessagesRequest{
@@ -228,20 +246,27 @@ for m, err := range seq {
 		Spool:  "default",
 		Handle: m.Handle,
 	})
-
-	// in.Data, in.State, in.Retries ...
-
-	err = c.Recover(ctx, spooler.RecoverRequest{
-		Spool:        "default",
-		Handle:       m.Handle,
-		DelaySeconds: 0,
-	})
-	// Or drop it for good:
-	err = c.Discard(ctx, spooler.DiscardRequest{
-		Spool:  "default",
-		Handle: m.Handle,
-	})
-	// ErrStaleToken: the message moved on since the listing; list again.
+	if err != nil {
+		return err
+	}
+	if worthRetrying(in.Data) {
+		// Back to the queue with its retries reset; DelaySeconds postpones it.
+		err = c.Recover(ctx, spooler.RecoverRequest{
+			Spool:  "default",
+			Handle: m.Handle,
+		})
+	} else {
+		err = c.Discard(ctx, spooler.DiscardRequest{
+			Spool:  "default",
+			Handle: m.Handle,
+		})
+	}
+	if errors.Is(err, spooler.ErrStaleToken) {
+		continue // The message moved on since the listing; list again later.
+	}
+	if err != nil {
+		return err
+	}
 }
 ```
 
