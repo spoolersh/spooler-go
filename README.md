@@ -128,10 +128,10 @@ When an operation may have changed state anyway (a `5xx` other than `503` and `5
 
 ## Testing
 
-The integration tests run when `SPOOLER_API` and `SPOOLER_KEY` are set and skip otherwise:
+The integration tests run against the local image when `SPOOLER_HOST` and `SPOOLER_API_KEY` are set and skip otherwise. The variables are the same as spooler-cli's:
 
 ```sh
-SPOOLER_API=http://localhost:8080/v1 SPOOLER_KEY=local go test ./...
+SPOOLER_HOST=localhost:8080 SPOOLER_API_KEY=local go test ./...
 ```
 
 ## Documentation

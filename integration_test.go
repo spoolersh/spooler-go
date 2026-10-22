@@ -3,7 +3,6 @@ package spooler
 import (
 	"context"
 	"errors"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -18,9 +17,10 @@ import (
 )
 
 // The integration tests run against a real server, the local image in CI,
-// when SPOOLER_API and SPOOLER_KEY are set, and skip otherwise. Each test
-// works in a queue of its own, created for it and deleted after it, so they
-// share nothing and run in parallel.
+// when SPOOLER_HOST and SPOOLER_API_KEY are set, and skip otherwise; the
+// variables are spooler-cli's. Each test works in a queue of its own,
+// created for it and deleted after it, so they share nothing and run in
+// parallel.
 
 const integrationSpool = "default"
 
@@ -29,20 +29,14 @@ var integrationReady sync.Once
 // integrationClient returns a client for the configured server, or skips.
 func integrationClient(t *testing.T) *Client {
 	t.Helper()
-	api, key := os.Getenv("SPOOLER_API"), os.Getenv("SPOOLER_KEY")
-	if api == "" || key == "" {
-		t.Skip("SPOOLER_API and SPOOLER_KEY are not set")
-	}
-	u, err := url.Parse(api)
-	if err != nil {
-		t.Fatalf(
-			"SPOOLER_API: %v",
-			err,
-		)
+	host, key := os.Getenv("SPOOLER_HOST"), os.Getenv("SPOOLER_API_KEY")
+	if host == "" || key == "" {
+		t.Skip("SPOOLER_HOST and SPOOLER_API_KEY are not set")
 	}
 	c := &Client{
-		Host:               u.Host,
-		InsecureDisableTLS: u.Scheme == "http",
+		Host: host,
+		// The local image serves plain HTTP, per the docs' local page.
+		InsecureDisableTLS: true,
 		APIKey:             key,
 	}
 	integrationReady.Do(func() {

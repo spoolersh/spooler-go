@@ -407,8 +407,9 @@ addition:
   values come from the docs, never from what the code currently does.
 - One real-socket test per package that owns a transport proves what a stub
   cannot see, such as the request's length reaching the wire.
-- Integration tests run against the local image when `SPOOLER_API` and
-  `SPOOLER_KEY` are set and skip otherwise. CI starts `spoolersh/memspoold` for
+- Integration tests run against the local image when `SPOOLER_HOST` and
+  `SPOOLER_API_KEY` are set and skip otherwise; the variables are
+  spooler-cli's. CI starts `spoolersh/memspoold` for
   them. They exercise the send, receive, settle loop, dedup, delay,
   ack-and-send, failed messages (list, inspect, recover, discard), and lease
   expiry.

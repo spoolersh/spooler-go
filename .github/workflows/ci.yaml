@@ -52,8 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GOTOOLCHAIN: local
-      SPOOLER_API: http://127.0.0.1:8080/v1
-      SPOOLER_KEY: local
+      SPOOLER_HOST: 127.0.0.1:8080
+      SPOOLER_API_KEY: local
 
     # One container per run, as the docs' local page prescribes; the tag is
     # pinned so the image cannot change between runs. The runner waits for
