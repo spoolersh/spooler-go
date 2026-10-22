@@ -3,7 +3,7 @@ name: spooler-go
 description: Write Go code against the Spooler message queue with the official SDK, module github.com/spoolersh/spooler-go (package spooler). Covers spooler.Client setup, the send, receive, ack loop, the settles, renew, errors.Is sentinels and ErrResultUnknown, dedup keys, delayed sends and handles, failed messages (list, inspect, recover, discard) with the iterators, queue settings, streaming payloads and tests against the spoolersh/memspoold image. Use when Go code imports spooler-go, mentions spooler.Client, Lease, Handle or SendRequest, or a Go service needs a message queue on Spooler.
 metadata:
   author: spoolersh
-  version: v0.2.0
+  version: v0.2.1
   docs: https://pkg.go.dev/github.com/spoolersh/spooler-go
 ---
 
