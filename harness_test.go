@@ -232,7 +232,7 @@ func assertRequest(t *testing.T, n int, r *http.Request, x request) {
 			n, act, exp,
 		)
 	}
-	if act, exp := header.Get("User-Agent"), "spooler-go/"+Version; act != exp {
+	if act, exp := header.Get("User-Agent"), "spooler-go/"+strings.TrimPrefix(Version, "v"); act != exp {
 		t.Errorf(
 			"request %d: user agent: %q; want %q",
 			n, act, exp,

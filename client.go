@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -146,7 +147,7 @@ func (c *Client) init() error {
 		}
 		c.http = &httputil.Client{
 			ClientBuilder: b,
-			UserAgent:     "spooler-go/" + Version,
+			UserAgent:     "spooler-go/" + strings.TrimPrefix(Version, "v"),
 			BaseURL:       u.String(),
 			// With DefaultAttempts the retries wait about 150ms, 450ms,
 			// 1.35s and 4.05s, each ±25%: about 6s in all, 4.5s to 7.5s.
