@@ -215,10 +215,10 @@ func rpcError(err error) error {
 }
 
 // dataStream is a payload handed back unread. It closes the transport's body
-// on EOF, so that a full read returns the connection without a Close. A
-// payload cut short reads as io.ErrUnexpectedEOF, as io.ReadFull reports
-// one; any other failure is the SDK's error. The first of EOF, a failure or
-// Close ends the operation, with the failure if any, or the close's.
+// on EOF, so that a full read returns the connection without a Close.
+// A payload cut short reads as io.ErrUnexpectedEOF, as io.ReadFull reports
+// one; any other failure is the package's error. The first of EOF, a failure
+// or Close ends the operation, with the failure if any, or the close's.
 type dataStream struct {
 	body io.ReadCloser
 	done func(error) // Ends the operation.
@@ -1050,9 +1050,6 @@ type Lease string
 type Handle string
 
 // A token is a credential, so it prints redacted through fmt.
-//
-// The SDK converts with string(...) where the value is presented back, and a
-// caller may do the same.
 const redacted = "[REDACTED]"
 
 // String returns a redacted form, never the token.

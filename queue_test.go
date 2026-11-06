@@ -9,7 +9,7 @@ import (
 )
 
 // The queue and the stats every listing case below answers with, and what the
-// SDK must make of them.
+// client must make of them.
 const (
 	testQueueJSON = `{
 		"name": "jobs",
@@ -141,7 +141,7 @@ func TestQueue(t *testing.T) {
 			},
 		},
 		{
-			name: "a state this SDK does not know fails the read",
+			name: "a state this package does not know fails the read",
 			req: QueueRequest{
 				Spool: "default",
 				Queue: "jobs",
@@ -1058,7 +1058,7 @@ func TestMessages(t *testing.T) {
 			},
 		},
 		{
-			name: "a state this SDK does not know fails the read",
+			name: "a state this package does not know fails the read",
 			req: MessagesRequest{
 				Spool: "default",
 				Queue: "jobs",

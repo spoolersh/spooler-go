@@ -295,8 +295,8 @@ var (
 func (q QueueDeleteMode) toWire() (string, error)  { return toWire(queueDeleteMode2wire, q) }
 func (q *QueueDeleteMode) fromWire(s string) error { return fromWire(queueDeleteMode4wire, q, s) }
 
-// String returns the mode's name as the API spells it, or QueueDeleteMode(n)
-// for a value the SDK does not define.
+// String returns the mode's name as the API spells it, or
+// "QueueDeleteMode(%d)" for a value this package does not define.
 func (q QueueDeleteMode) String() string {
 	return enumString("QueueDeleteMode", queueDeleteMode2wire, q)
 }
@@ -336,8 +336,8 @@ var (
 func (s QueueState) toWire() (string, error)  { return toWire(queueState2wire, s) }
 func (s *QueueState) fromWire(w string) error { return fromWire(queueState4wire, s, w) }
 
-// String returns the state's name as the API spells it, or QueueState(n) for
-// a value the SDK does not define.
+// String returns the state's name as the API spells it, or "QueueState(%d)"
+// for a value this package does not define.
 func (s QueueState) String() string { return enumString("QueueState", queueState2wire, s) }
 
 type queueState QueueState
@@ -482,8 +482,8 @@ var (
 func (s MessageState) toWire() (string, error)  { return toWire(messageState2wire, s) }
 func (s *MessageState) fromWire(w string) error { return fromWire(messageState4wire, s, w) }
 
-// String returns the state's name as the API spells it, or MessageState(n)
-// for a value the SDK does not define.
+// String returns the state's name as the API spells it, or "MessageState(%d)"
+// for a value this package does not define.
 func (s MessageState) String() string { return enumString("MessageState", messageState2wire, s) }
 
 // ParseMessageState returns the state named s, as the API spells it.
@@ -571,8 +571,8 @@ func (m *message) toMessage() Message {
 	return ret
 }
 
-// enumString names an enum value as the wire does, or, for one the SDK does
-// not define, as the standard library's stringers do: Type(value).
+// enumString names an enum value as the wire does, or, for one this package
+// does not define, as the standard library's stringers do: "Type(%v)".
 func enumString[T ~uint](typ string, m map[T]string, v T) string {
 	if s, has := m[v]; has {
 		return s

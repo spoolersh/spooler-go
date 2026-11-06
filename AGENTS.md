@@ -2,10 +2,10 @@
 
 ## What this is
 
-`github.com/spoolersh/spooler-go`, package `spooler`: the Go SDK for Spooler, a
+`github.com/spoolersh/spooler-go`, package `spooler`: the Go client library for Spooler, a
 hosted message queue with a small API surface and simplicity as its core idea.
 
-The SDK is the thing the tagline is reserved for ("message queues as simple as
+The library is the thing the tagline is reserved for ("message queues as simple as
 Go channels"); the HTTP API is what it speaks, and it is the first transport,
 not the only one ever.
 
@@ -19,7 +19,7 @@ the server does not define.
   path, parameter, state, limit, guarantee or retry rule is written here, not
   even as a summary, and none is ever moved here. The docs define those, they
   change, and a copy drifts and then gets reasoned from instead of the
-  source. This file holds the SDK's own decisions and says where to look for
+  source. This file holds the library's own decisions and says where to look for
   the rest. When a task needs a fact about the API, read it from the docs at
   the time, and cite the page.
 - The public docs at https://docs.spooler.sh are the contract: `api` is the
@@ -47,42 +47,42 @@ API, auth, topology, replica or failover mechanics, storage details, limits
 typed from memory, pricing, roadmap, or anything from the private repos'
 source. Every statement must be checkable with an API key and `curl`.
 
-## What the SDK owes the delivery contract
+## What the library owes the delivery contract
 
 The contract itself is the docs' `delivery` and `errors` pages; read them, it
-is not repeated here. What follows is only the SDK's side of it.
+is not repeated here. What follows is only the library's side of it.
 
-- **The SDK adds no guarantee and hides none.** It never dedups, reorders,
+- **The library adds no guarantee and hides none.** It never dedups, reorders,
   batches, acks, renews or settles on the consumer's behalf, and never swallows
   an error the docs tell a consumer to expect.
-- **Tokens are opaque to the SDK too.** It never inspects, compares, parses or
+- **Tokens are opaque to the library too.** It never inspects, compares, parses or
   constructs one; the only use is presenting it back. It redacts them in logs
   and traces.
-- **No name in the SDK implies an ordering.**
-- **The SDK retries exactly what the docs declare transient, and nothing
+- **No name in the package implies an ordering.**
+- **The client retries exactly what the docs declare transient, and nothing
   else.** That a retry is safe does not make a condition transient: the docs
   call some retries harmless without asking any client to make them. The retry
   functions cite the docs' table they implement, and a change there is made by
   re-reading that table, never from memory or from this file.
-- **The SDK retries an unknown result only when the request asks.** By
+- **The client retries an unknown result only when the request asks.** By
   default a failure is retried only if the docs say it changed nothing and
   declare it transient. An attempt whose result is unknown is retried only
   when the request sets `RetryUnknown` (`SendRequest`, `AckAndSendRequest`),
   and its doc states plainly what a retry may cause, never a condition that
   makes it safe: for a send, a possible second message with its own id; for
-  an ack-and-send, nothing appended twice. The SDK never claims a retry is
+  an ack-and-send, nothing appended twice. The library never claims a retry is
   safe on timing it cannot check (a dedup window, a deadline); the designs
   that did were dropped. A call's error carries every attempt's
   failure (`httputil.AttemptErrors`) and matches `ErrResultUnknown` if any
   attempt left the result unknown: no later failure settles that, only a
   success does.
 
-## Shape of the SDK (decided upstream, do not relitigate)
+## Shape of the library (decided upstream, do not relitigate)
 
 - Every operation is a method on Client, named for the verb the API
   documents, with context.Context first.
 - A long-poll receive is a single request. The zero value of a request field
-  means the API's own default, whatever the docs say that is: the SDK sends
+  means the API's own default, whatever the docs say that is: the client sends
   nothing for it, and never turns an absent parameter into an explicit one.
   Departing from the default is an explicit choice by the caller.
 - Two layers, never merged. A Client method is one request and mirrors the
@@ -95,12 +95,12 @@ is not repeated here. What follows is only the SDK's side of it.
   The methods are `net.Conn.Read`, the
   functions are `io.ReadFull`: a caller who wants the loop gets it, one who
   wants the bound keeps it, and a hook still fires per request.
-- The context governs I/O, nothing else. It bounds every request the SDK
+- The context governs I/O, nothing else. It bounds every request the client
   makes and is checked only there: a walker whose context is cancelled
   fails on its next request, not between the items of a page it already
-  holds. Those items are in-process data the SDK hands over as they are, the
+  holds. Those items are in-process data the package hands over as they are, the
   way `bufio.Scanner` drains its buffer; a caller who wants to stop sooner
-  checks the context in its own loop. The SDK never polls `ctx.Done()`
+  checks the context in its own loop. The package never polls `ctx.Done()`
   around work that does no I/O.
 - The two kinds of token are distinct Go types, `Lease` and `Handle`, so
   presenting one where the other goes does not compile.
@@ -118,16 +118,16 @@ is not repeated here. What follows is only the SDK's side of it.
   keeps the (Result, error) shape, lets each method gain fields without
   changing its return signature, and keeps a buffered delivery together for
   handlers and channels. The extra types are a deliberate trade-off. Both
-  this shape and separate data/metadata returns have Go precedent; this SDK
+  this shape and separate data/metadata returns have Go precedent; this package
   follows the operation-specific result approach used by etcd.
 - Return values, not pointers, until a type gains mutating methods.
 - Cross-cutting extras go on ClientTrace, not into results.
-- The SDK converts a value only where it loses nothing. What the caller
+- The package converts a value only where it loses nothing. What the caller
   sends in a unit the API fixes is an integer in that unit, with the unit
   in the field's name (`DelaySeconds`, `WaitSeconds`, `IntervalMicros`),
   as Uber's guide prescribes for external systems and as `http.Cookie.MaxAge`
-  does: a `time.Duration` there would force the SDK to round or refuse,
-  and neither is its call. What the SDK hands back for use gets the time
+  does: a `time.Duration` there would force the package to round or refuse,
+  and neither is its call. What the package hands back for use gets the time
   types, since those conversions are exact: a `Retry-After` becomes a
   `time.Duration`, a timestamp a `time.Time`.
 - One error type. It carries the kind, the server's message, and the
@@ -137,17 +137,17 @@ is not repeated here. What follows is only the SDK's side of it.
   whether it travels in the body or in a header, never a field of every
   error. Which kinds exist and what each carries is the docs' errors page,
   not this file.
-- The error never carries a status: the SDK is transport-agnostic, and a
+- The error never carries a status: the package is transport-agnostic, and a
   status is HTTP's. Kinds are the API's, one to one with the docs' table;
-  the SDK invents none. The one condition the API reports by status alone,
-  a 503 a gateway can answer too, is a sentinel of the SDK's own
+  the package invents none. The one condition the API reports by status alone,
+  a 503 a gateway can answer too, is a sentinel of the package's own
   (`ErrUnavailable`, like `ErrResultUnknown`), derived at the transport
   boundary and matched with `errors.Is`, never a kind. It matches a 503 that
-  names no kind this SDK knows, so code matching it keeps working when the
-  server adds a kind this SDK version does not know yet; a known kind on a
+  names no kind this package knows, so code matching it keeps working when the
+  server adds a kind this package's version does not know yet; a known kind on a
   503 is that kind, not the condition. An answer that names a kind or
   carries a message is the API's and is an `Error`, its kind
-  ErrorKindUnknown when this SDK does not know it; the status appears
+  ErrorKindUnknown when this package does not know it; the status appears
   nowhere in it. An answer that does neither is not the API's and is a
   plain error, not an `Error`, whose text is the status and the body, for
   a person to read; the sentinels are derived all the same. Callers never
@@ -159,7 +159,7 @@ is not repeated here. What follows is only the SDK's side of it.
   both forms: never make a caller parse text for what could be a field, and
   never repeat in text what a field next to it already says.
 - Data-related operations support both []byte and streaming versions.
-- Payloads are []byte or an io.Reader; the SDK neither encodes nor frames
+- Payloads are []byte or an io.Reader; the package neither encodes nor frames
   them. A seekable reader is sent with its length and can be sent again; a
   plain one is streamed and read once.
 - Encryption and compression are not client features, decided 2026-09-22.
@@ -176,8 +176,8 @@ is not repeated here. What follows is only the SDK's side of it.
   `cipher.AEAD` with a caller-supplied keyring; codecs are `compress/gzip`
   or `compress/flate`, since no zstd exists in the standard library or
   `golang.org/x`. The envelope, if one is ever defined, is a docs page.
-- Dedup: the SDK passes the caller's key through and lets the server hash it.
-  A fingerprint the caller computed is a separate constructor; the SDK
+- Dedup: the client passes the caller's key through and lets the server hash it.
+  A fingerprint the caller computed is a separate constructor; the package
   computes none.
 - A handle is never requested by default, since it is a bearer credential.
   Asking for one is an explicit request field.
@@ -188,13 +188,13 @@ is not repeated here. What follows is only the SDK's side of it.
   - no exported signature, struct field or embedded type mentions them, and
     no accessor hands out the client, a request, a response or a header;
   - no configuration takes them (`*http.Client`, `http.RoundTripper`,
-    `http.Header`); what a user may tune is expressed in the SDK's own terms
-    (`Host`, `InsecureDisableTLS`), and a new knob is a new SDK field. A
+    `http.Header`); what a user may tune is expressed in the package's own terms
+    (`Host`, `InsecureDisableTLS`), and a new knob is a new `Client` field. A
     knob that turns off a security property carries the `Insecure` prefix,
     as `tls.Config.InsecureSkipVerify` does;
-  - `ClientTrace` hooks receive SDK structs of plain values, never a request
+  - `ClientTrace` hooks receive the package's structs of plain values, never a request
     or a response;
-  - errors are translated at the boundary into the SDK's error type. A
+  - errors are translated at the boundary into the package's error type. A
     transport error (`*url.Error`, the internal status error) is not
     returned and not reachable through `Unwrap`; only `context` errors stay
     matchable with `errors.Is`. **This holds for every error that leaves
@@ -259,7 +259,13 @@ addition:
   request may have reached the server" is kept. This exception applies only
   to fields. Exported variables and constants still require documentation,
   individually or as a group.
-- The SDK never coins vocabulary. Every noun and verb of the domain in a
+- The word "SDK" is banned: in code, comments, test names, the README, the
+  skill, NOTICE and this file. The Go package refers to itself as "this
+  package" or "the package" ("a kind this package does not know"); the
+  thing that makes requests is "the client" ("the client retries what the
+  docs declare transient"); in prose for people it is "the client library"
+  or "the library".
+- The package never coins vocabulary. Every noun and verb of the domain in a
   name, a doc comment or the README is one the public docs already use for
   the same thing: lease, handle, spool, queue, settle, deliver, append,
   discard, and so on. Before using a word that feels like a term of art,
@@ -292,9 +298,9 @@ addition:
   "Zero sends an empty message." The word is always "zero", never "nil", "empty" or "absent",
   whatever the type. Where a pointer field's pointed-to 0 means something
   else, that is said in the body as "a value of 0".
-- **An optional field's shape says whether the SDK may read a given zero
+- **An optional field's shape says whether the package may read a given zero
   as absent.** A bare field is one whose zero the server reads as absence
-  too, so the SDK loses nothing by not sending it: `DelaySeconds int` (0
+  too, so the client loses nothing by not sending it: `DelaySeconds int` (0
   is immediate), `ReturnHandle bool`, `Limit int`, `After string` (the
   first page). A pointer or a tagged union is used in two cases, and the
   request never sends nil but sends everything else verbatim, empty
@@ -313,7 +319,7 @@ addition:
   (`DedupString` or `DedupHash`), and its key is that field's value; a
   constructor only tags, checks nothing, and so returns no error, where
   `Parse*` does because text may name nothing. Nothing in this rule adds a
-  local check: the SDK never decides whether a non-nil payload is valid,
+  local check: the package never decides whether a non-nil payload is valid,
   per the validation bullet below.
 - In a struct declaration, a field that carries a doc comment is separated
   from the field before it by a blank line, so that the comment reads as
@@ -344,7 +350,7 @@ addition:
   "could the server have caught this exact mistake?" If yes, let it: its
   answer is authoritative and typed, and a mirrored rule drifts. So no name
   patterns, length or size caps, dedup key charsets, or duration bounds in
-  the SDK. What the SDK must check is its own doing:
+  the package. What the package must check is its own doing:
   - its unions and one-of fields (both or neither set), where it would
     otherwise pick one silently;
   - its URL building: `url.PathEscape` every path segment and reject empty,
@@ -427,12 +433,12 @@ local image, in under a screen.
 ## The skill
 
 `skills/spooler-go/SKILL.md` is an [Agent Skill](https://agentskills.io)
-for agents that *use* this SDK, installable with `npx skills add
+for agents that *use* this library, installable with `npx skills add
 spoolersh/spooler-go` and mirrored into the `spoolersh/ai` repo. It is
-published content, like the README: it restates the SDK's surface and
+published content, like the README: it restates the package's surface and
 the docs' rules in the few thousand tokens an agent loads, with a link
 for the rest. It is not loaded by agents working on this repo and says
-nothing about how the SDK is built.
+nothing about how the library is built.
 
 - **Whoever changes the public surface updates the skill in the same
   change**: a method, a request or result field, a sentinel, a constant
@@ -450,7 +456,7 @@ nothing about how the SDK is built.
   skill.
 - The same voice as the README and the doc comments: terse, factual, the
   docs' vocabulary, no superlatives; examples must compile against the
-  SDK at `Version`.
+  package at `Version`.
 
 ## Editing files
 
@@ -471,4 +477,4 @@ convention "where: imperative what to change", i.e., "all: make all doc
 comments complete sentences" -- short imperative commit messages. PRs say what
 changed and why in a sentence or two, list material changes, and cite the
 observable (an operation, a header, a documented status) for every claim the
-SDK newly makes about the API.
+library newly makes about the API.

@@ -9,9 +9,6 @@ import (
 	"testing"
 )
 
-// TestEnumString covers every enum's String: a defined value prints as its
-// name, and one the SDK does not define prints as Type(value), the form the
-// standard library's stringers use.
 // TestTokenRedaction checks that a token never prints in clear by accident,
 // through fmt or slog, while an explicit conversion still yields the value.
 func TestTokenRedaction(t *testing.T) {
@@ -66,6 +63,9 @@ func TestTokenRedaction(t *testing.T) {
 	}
 }
 
+// TestEnumString covers every enum's String: a defined value prints as its
+// name, and one this package does not define prints as Type(value), the form
+// the standard library's stringers use.
 func TestEnumString(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -134,8 +134,8 @@ func TestEnumString(t *testing.T) {
 	}
 }
 
-// TestToWire covers the enum-to-wire direction, which only a value this SDK
-// does not define can fail.
+// TestToWire covers the enum-to-wire direction, which only a value this
+// package does not define can fail.
 func TestToWire(t *testing.T) {
 	for _, test := range []struct {
 		name string

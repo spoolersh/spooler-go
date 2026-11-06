@@ -23,7 +23,7 @@ import (
 // and the details.
 type Error struct {
 	// Kind is what went wrong, as the API names it. It is ErrorKindUnknown
-	// for an answer without a kind and for a kind this SDK does not know.
+	// for an answer without a kind and for a kind this package does not know.
 	Kind ErrorKind
 
 	// Message is the server's text, complete on its own.
@@ -102,7 +102,7 @@ func (e *clientError) Error() string {
 	return sb.String()
 }
 
-// Unwrap exposes only what is contract: the API's [Error], a request the SDK
+// Unwrap exposes only what is contract: the API's [Error], a request the package
 // refused as [ErrInvalidRequest], the context errors by their sentinel, and
 // the conditions, such as [ErrResultUnknown] and [ErrUnavailable]. Anything
 // else in the chain (a *url.Error, say) stays reachable as text only.
@@ -145,7 +145,7 @@ func resultError(err error) error {
 	}
 }
 
-// ErrInvalidRequest is what every request the SDK refuses before sending.
+// ErrInvalidRequest is what every request the package refuses before sending.
 // Matches with [errors.Is]: a required field missing, or two that exclude each
 // other both set. The text says which.
 var ErrInvalidRequest = errors.New("invalid request")
@@ -312,7 +312,7 @@ var (
 )
 
 // ErrUnavailable matches a spool momentarily unavailable: a 503 that names no
-// kind this SDK knows, per https://docs.spooler.sh/errors. It is no kind,
+// kind this package knows, per https://docs.spooler.sh/errors. It is no kind,
 // since a gateway in front of the API can answer it too. The attempt that
 // answered it changed nothing; an earlier attempt of the same call may have,
 // which [ErrResultUnknown] reports, so check that first.
@@ -396,7 +396,7 @@ func (e *RateLimitedError) Error() string {
 type SpoolLimit uint
 
 const (
-	// SpoolLimitUnknown is a cap this SDK does not know, or none.
+	// SpoolLimitUnknown is a cap this package does not know, or none.
 	SpoolLimitUnknown SpoolLimit = iota
 	// SpoolLimitMessages is the cap on stored messages.
 	SpoolLimitMessages
@@ -416,7 +416,7 @@ func (l SpoolLimit) toWire() (string, error)  { return toWire(spoolLimit2wire, l
 func (l *SpoolLimit) fromWire(w string) error { return fromWire(spoolLimit4wire, l, w) }
 
 // String returns the cap's name as the API spells it, or SpoolLimit(n) for
-// a value the SDK does not define.
+// a value this package does not define.
 func (l SpoolLimit) String() string { return enumString("SpoolLimit", spoolLimit2wire, l) }
 
 // SpoolFullError is the details of an [ErrorKindSpoolFull] answer.
@@ -433,7 +433,7 @@ func (e *SpoolFullError) Error() string {
 	return fmt.Sprintf("spool full: max %d %s", e.Max, e.Limit)
 }
 
-// errorObj is the wire form of an error. Kind stays a string: one this SDK
+// errorObj is the wire form of an error. Kind stays a string: one this package
 // does not know must not fail the decode.
 type errorObj struct {
 	Kind    string          `json:"kind"`
@@ -562,7 +562,7 @@ func (e *dedupClaimedError) toError() *DedupClaimedError {
 
 type spoolLimit SpoolLimit
 
-// UnmarshalJSON leaves a limit this SDK does not know as SpoolLimitUnknown,
+// UnmarshalJSON leaves a limit this package does not know as SpoolLimitUnknown,
 // so that the cap next to it still reaches the caller.
 func (l *spoolLimit) UnmarshalJSON(p []byte) error {
 	var s string
@@ -588,7 +588,7 @@ func (e *spoolFullError) toError() *SpoolFullError {
 // httpError turns the status error of an HTTP call into the error the
 // operation returns. An answer that names a kind or carries a message is the
 // API's and becomes the [Error] it describes, its kind ErrorKindUnknown if
-// this SDK does not know it. Any other answer (a gateway's 502, say) is not
+// this package does not know it. Any other answer (a gateway's 502, say) is not
 // the API's and becomes a plain error of its status and its body, quoted; the
 // status never reaches a field, and the conditions a status signals are
 // statusCondition's.
@@ -621,7 +621,7 @@ func httpError(err error) error {
 }
 
 // statusCondition returns the sentinel of the condition the status of err's
-// last attempt signals when the answer names no kind this SDK knows, or nil.
+// last attempt signals when the answer names no kind this package knows, or nil.
 //
 // Today only a status a gateway can answer too gets one; every answer of the
 // API itself carries a kind.
@@ -631,7 +631,7 @@ func statusCondition(err error) error {
 		return nil
 	}
 	if obj, ok := se.Desc.(*errorObj); ok && obj.toKind() != ErrorKindUnknown {
-		// A kind this SDK knows says what the status means.
+		// A kind this package knows says what the status means.
 		return nil
 	}
 	if se.Code == http.StatusServiceUnavailable {

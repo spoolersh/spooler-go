@@ -1,13 +1,22 @@
 ---
 name: spooler-go
-description: Write Go code against the Spooler message queue with the official SDK, module github.com/spoolersh/spooler-go (package spooler). Covers spooler.Client setup, the send, receive, ack loop, the settles, renew, errors.Is sentinels and ErrResultUnknown, dedup keys, delayed sends and handles, failed messages (list, inspect, recover, discard) with the iterators, queue settings, streaming payloads and tests against the spoolersh/memspoold image. Use when Go code imports spooler-go, mentions spooler.Client, Lease, Handle or SendRequest, or a Go service needs a message queue on Spooler.
+description: >-
+  Write Go code against the Spooler message queue with the official Go client
+  library, module github.com/spoolersh/spooler-go (package spooler). Covers
+  spooler.Client setup, the send, receive, ack loop, the settles, renew,
+  errors.Is sentinels and ErrResultUnknown, dedup keys, delayed sends and
+  handles, failed messages (list, inspect, recover, discard) with the
+  iterators, queue settings, streaming payloads and tests against the
+  spoolersh/memspoold image. Use when Go code imports spooler-go, mentions
+  spooler.Client, Lease, Handle or SendRequest, or a Go service needs a
+  message queue on Spooler.
 metadata:
   author: spoolersh
   version: v0.2.1
   docs: https://pkg.go.dev/github.com/spoolersh/spooler-go
 ---
 
-# Spooler Go SDK
+# Spooler Go client library
 
 Module `github.com/spoolersh/spooler-go`, package `spooler`, Apache 2.0.
 
@@ -32,9 +41,9 @@ go get github.com/spoolersh/spooler-go
   intact for the listing, inspect, recover and discard.
 - `Lease` and `Handle` are opaque credentials; never build or compare them.
   Message ids are for logs; no call takes one.
-- The SDK adds no guarantee and hides none: no automatic ack, renew, batching
+- The library adds no guarantee and hides none: no automatic ack, renew, batching
   or reordering, and no retry of a result it cannot prove safe.
-- The zero value of a request field means the server's default; the SDK sends
+- The zero value of a request field means the server's default; the library sends
   nothing for it.
 
 ## Client
@@ -109,7 +118,7 @@ return c.Ack(ctx, spooler.AckRequest{
 
 A worker loop is `for { Recv; if !ok { continue }; work; settle }`. Run several
 goroutines, each calling `Recv` on the shared client, for concurrency. There is
-no callback or channel consumer in the SDK.
+no callback or channel consumer in the library.
 
 ## Settles
 
@@ -146,7 +155,7 @@ case errors.Is(err, spooler.ErrQueueNotFound):
 		log.Println("no such queue:", d.Queue)
 	}
 case errors.Is(err, spooler.ErrRateLimited):
-	// The SDK already waited Retry-After and retried, Attempts times.
+	// The client already waited Retry-After and retried, Attempts times.
 	var d *spooler.RateLimitedError
 	if errors.As(err, &d) {
 		time.Sleep(d.RetryAfter)
@@ -154,7 +163,7 @@ case errors.Is(err, spooler.ErrRateLimited):
 case errors.Is(err, spooler.ErrSpoolFull):
 	// Backpressure: consume and ack, or delete queues, then retry.
 case errors.Is(err, spooler.ErrUnavailable):
-	// 503 with no kind; the SDK already retried Attempts times.
+	// 503 with no kind; the client already retried Attempts times.
 case errors.Is(err, spooler.ErrInvalidRequest):
 	// Refused before sending: a missing field, or both of an either/or set.
 }
@@ -177,7 +186,7 @@ Errors carry no HTTP status. Act on the kind, *NEVER* on the text.
 ### Unknown results
 
 `ErrResultUnknown` matches when any attempt may have reached the server and got
-no definite answer (a `500`, `502`, `504`, a dropped connection). The SDK does
+no definite answer (a `500`, `502`, `504`, a dropped connection). The library does
 not retry those unless the request sets `RetryUnknown`:
 
 - `SendRequest{RetryUnknown: true}` may append the message twice (a second id).
@@ -208,7 +217,7 @@ if res.Duplicate {
 ```
 
 The queue needs `DedupWindowSeconds > 0`, else `ErrDedupDisabled`. Assign the
-key before the first attempt and reuse it on retries. The SDK never validates
+key before the first attempt and reuse it on retries. The library never validates
 the key; the server does.
 
 ## Delays, handles, cancellation

@@ -39,7 +39,7 @@ func TestErrorResponse(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		res      response
-		times    int    // Answers before the SDK gives up; 1 unless transient.
+		times    int    // Answers before the client gives up; 1 unless transient.
 		attempts int    // The client's Attempts; zero is the default.
 		exp      *Error // What errors.As yields; nil for an answer not the API's.
 		text     string // The text of an answer not the API's, after "spooler: ".
@@ -336,7 +336,7 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrSpoolFull,
 		},
 		{
-			name: "spool full of something this SDK does not know keeps the cap",
+			name: "spool full of something this package does not know keeps the cap",
 			res: response{
 				status: 507,
 				body:   `{"kind":"spool_full","message":"the spool holds 7 things","details":{"limit":"things","max":7}}`,
@@ -393,7 +393,7 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrUnavailable,
 		},
 		{
-			name: "a kind this SDK does not know on a status with a sentinel still matches it",
+			name: "a kind this package does not know on a status with a sentinel still matches it",
 			res: response{
 				status: 503,
 				body:   `{"kind":"maintenance","message":"back in five"}`,
@@ -406,7 +406,7 @@ func TestErrorResponse(t *testing.T) {
 			is: ErrUnavailable,
 		},
 		{
-			name: "a kind this SDK does not know keeps the message and no status",
+			name: "a kind this package does not know keeps the message and no status",
 			res: response{
 				status: 404,
 				body:   `{"kind":"teapot_not_found","message":"no teapot"}`,

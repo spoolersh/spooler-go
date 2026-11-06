@@ -528,7 +528,7 @@ func TestInspect(t *testing.T) {
 			},
 		},
 		{
-			// Headers this SDK cannot read do not drop the payload.
+			// Headers this package cannot read do not drop the payload.
 			name: "unreadable state and retry count",
 			req: InspectRequest{
 				Spool:  "default",
@@ -650,7 +650,7 @@ func TestRecvTrace(t *testing.T) {
 			ends: []error{nil},
 		},
 		{
-			// Buffered, the SDK reads and classifies: the hook sees the
+			// Buffered, the client reads and classifies: the hook sees the
 			// error the caller gets, an unknown result.
 			name:  "a buffered read cut short ends with the result unknown",
 			res:   cut,

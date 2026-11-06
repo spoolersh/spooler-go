@@ -17,13 +17,13 @@ import (
 
 const testKey = "test-key"
 
-// exchange is one request the SDK must make and the response it gets.
+// exchange is one request the client must make and the response it gets.
 type exchange struct {
 	req request
 	res response
 }
 
-// request is what the SDK must send, exactly. Headers every request carries
+// request is what the client must send, exactly. Headers every request carries
 // (Authorization, User-Agent, X-Request-Id) are checked for all cases and are
 // not listed here.
 type request struct {
