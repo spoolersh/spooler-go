@@ -172,7 +172,14 @@ var (
 type ErrorKind uint
 
 const (
-	// ErrorKindUnknown is a kind this SDK does not know, or none.
+	// ErrorKindUnknown is a kind this package does not know, or no kind at all.
+	//
+	// It is a fact about this package's version and says nothing about the
+	// operation's result.
+	//
+	// See [ErrResultUnknown], which matches when whether a change happened is
+	// unknown, and [ErrorKindOperationUnconfirmed], the one kind by which the
+	// server says so itself.
 	ErrorKindUnknown ErrorKind = iota
 	// ErrorKindInvalidToken is the API's invalid_token kind.
 	ErrorKindInvalidToken
