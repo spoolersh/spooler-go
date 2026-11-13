@@ -27,17 +27,18 @@ the server does not define.
   error table and the retry rules, `limits` the bounds, `local` the
   evaluation image. The README and doc comments may say what those pages
   say, in fewer words, with a link.
-- When the docs and the evaluation server disagree, or the docs are silent,
+- When the docs and the local server disagree, or the docs are silent,
   do not guess: ask the project owner. Never write down behaviour that is not
   documented and observable.
-- The evaluation server is the `spoolersh/memspoold` Docker image. The docs'
+- The local server is the `spoolersh/memspoolerd` Docker image. The docs'
   `local` page says what it reproduces and what it does not; tests for what
   it does not run against a fake.
-- memspoold is not open source: it ships under the Spooler Local Evaluation
-  License (published at spooler.sh/legal/spooler-evaluation-license.txt), which permits
-  development, testing, and evaluation, including automated test environments.
-  Never describe it as "OSS" or "open source" in this repo; say "free for
-  development and testing".
+- memspoolerd is not open source: it ships under the memspoolerd License
+  (published at spooler.sh/legal/memspoolerd-license.txt), which permits
+  running it for your own purposes, production and automated test
+  environments included, and forbids providing it to others or hosting it
+  as a service. Never describe it as "OSS" or "open source" in this repo;
+  say "free to run yourself".
 
 ## This repo is public
 
@@ -415,7 +416,7 @@ addition:
   cannot see, such as the request's length reaching the wire.
 - Integration tests run against the local image when `SPOOLER_HOST` and
   `SPOOLER_API_KEY` are set and skip otherwise; the variables are
-  spooler-cli's. CI starts `spoolersh/memspoold` for
+  spooler-cli's. CI starts `spoolersh/memspoolerd` for
   them. They exercise the send, receive, settle loop, dedup, delay,
   ack-and-send, failed messages (list, inspect, recover, discard), and lease
   expiry.

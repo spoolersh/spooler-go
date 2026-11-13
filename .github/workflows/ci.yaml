@@ -59,8 +59,8 @@ jobs:
     # pinned so the image cannot change between runs. The runner waits for
     # the image's own health check before the first step.
     services:
-      memspoold:
-        image: spoolersh/memspoold:latest
+      memspoolerd:
+        image: spoolersh/memspoolerd:latest
         ports:
           - 127.0.0.1:8080:8080
         options: >-

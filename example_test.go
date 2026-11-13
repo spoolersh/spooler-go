@@ -9,10 +9,10 @@ import (
 	"github.com/spoolersh/spooler-go"
 )
 
-// The send, receive, ack loop against the local evaluation image, which any
-// key authenticates. Run it with:
+// The send, receive, ack loop against the local image, which any key
+// authenticates. Run it with:
 //
-//	docker run --rm -p 127.0.0.1:8080:8080 spoolersh/memspoold
+//	docker run --rm -p 127.0.0.1:8080:8080 spoolersh/memspoolerd
 func Example() {
 	ctx := context.Background()
 	c := spooler.Client{

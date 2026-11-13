@@ -7,7 +7,7 @@ description: >-
   errors.Is sentinels and ErrResultUnknown, dedup keys, delayed sends and
   handles, failed messages (list, inspect, recover, discard) with the
   iterators, queue settings, streaming payloads and tests against the
-  spoolersh/memspoold image. Use when Go code imports spooler-go, mentions
+  spoolersh/memspoolerd image. Use when Go code imports spooler-go, mentions
   spooler.Client, Lease, Handle or SendRequest, or a Go service needs a
   message queue on Spooler.
 metadata:
@@ -337,10 +337,10 @@ error: the lease is the caller's to settle.
 ## Testing against the local image
 
 ```sh
-docker run --rm -p 127.0.0.1:8080:8080 spoolersh/memspoold
+docker run --rm -p 127.0.0.1:8080:8080 spoolersh/memspoolerd
 SPOOLER_HOST=localhost:8080 SPOOLER_API_KEY=local go test ./...
 ```
 
-The image is free for development and testing. It accepts any key, has one
+The image is free to run yourself. It accepts any key, has one
 spool `default`, persists nothing and never answers `402`, `429` or `503`;
 cover those in unit tests against a fake, not against the image.

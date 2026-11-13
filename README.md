@@ -16,9 +16,9 @@ go get github.com/spoolersh/spooler-go
 Run Spooler [locally](https://docs.spooler.sh/local):
 
 ```sh
-docker run --rm -p 127.0.0.1:8080:8080 spoolersh/memspoold
+docker run --rm -p 127.0.0.1:8080:8080 spoolersh/memspoolerd
 ```
-> The image is an evaluation build: nothing persists, only the `default` spool exists, and the conditions it never produces are listed on [docs.spooler.sh/local](https://docs.spooler.sh/local).
+> The image is free to run yourself: nothing persists, only the `default` spool exists, and the conditions it never produces are listed on [docs.spooler.sh/local](https://docs.spooler.sh/local).
 
 > The example below is in [example_test.go](example_test.go), so it compiles with the package.
 
